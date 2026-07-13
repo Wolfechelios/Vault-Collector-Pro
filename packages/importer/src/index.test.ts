@@ -1,0 +1,1 @@
+import{describe,it,expect}from'vitest';import{parseCsv,mapImportRow}from'./index';describe('importer',()=>{it('handles quoted commas',()=>expect(parseCsv('title,category\n"Card, Rare",cards')[0].title).toBe('Card, Rare'));it('maps legacy name',()=>expect(mapImportRow({name:'Old item'}).title).toBe('Old item'))});

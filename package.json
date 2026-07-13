@@ -1,0 +1,18 @@
+{
+  "name": "vault-platform",
+  "private": true,
+  "version": "0.4.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @vault/desktop",
+    "dev:mobile": "npm run dev --workspace @vault/mobile",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "tauri": "npm run tauri --workspace @vault/desktop",
+    "check": "npm test && npm run build"
+  }
+}

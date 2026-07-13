@@ -1,0 +1,1 @@
+{"name":"@vault/importer","version":"0.3.0","type":"module","exports":"./src/index.ts","scripts":{"test":"vitest run"},"devDependencies":{"vitest":"^2.1.0"}}
