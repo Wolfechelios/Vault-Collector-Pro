@@ -19,7 +19,7 @@ jobs:
       - name: Install workspace dependencies
         run: npm install --no-audit --no-fund
       - name: Run frontend and package tests
-        run: npm test -- --maxWorkers=1 --minWorkers=1
+        run: npm test
       - name: Build desktop and mobile applications
         run: npm run build
 
