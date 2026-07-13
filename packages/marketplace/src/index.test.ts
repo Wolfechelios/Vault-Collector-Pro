@@ -19,7 +19,7 @@ describe('marketplace intelligence', () => {
     const snapshot = valueItem(item, [{ provider: 'ebay', health: 'ready', comparables: [
       { id: '1', provider: 'ebay', title: 'DeWalt DCF887 XR Impact Driver', soldAmountMinor: 9000, quantity: 1 },
       { id: '2', provider: 'ebay', title: 'DeWalt DCF887 20V Impact Driver', soldAmountMinor: 10000, quantity: 1 },
-      { id: '3', provider: 'manual', title: 'DeWalt DCF887 XR Tool', soldAmountMinor: 9500, quantity: 1 }
+      { id: '3', provider: 'manual', title: 'DeWalt DCF887 XR Impact Driver Tool Only', soldAmountMinor: 9500, quantity: 1 }
     ] }]);
     expect(snapshot.summary.sampleCount).toBe(3);
     expect(snapshot.summary.medianMinor).toBe(9500);
