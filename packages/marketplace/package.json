@@ -1,0 +1,17 @@
+{
+  "name": "@vault/marketplace",
+  "private": true,
+  "version": "0.6.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@vault/domain": "0.3.0",
+    "@vault/pricing": "0.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}
