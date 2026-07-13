@@ -22,6 +22,8 @@ jobs:
         run: npm run test --workspace @vault/desktop
       - name: Test capture intelligence
         run: npm run test --workspace @vault/capture
+      - name: Test marketplace intelligence
+        run: npm run test --workspace @vault/marketplace
       - name: Test domain
         run: npm run test --workspace @vault/domain
       - name: Test storage
