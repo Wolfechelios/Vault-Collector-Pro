@@ -1,7 +1,7 @@
 node_modules/
 dist/
 target/
-src-tauri/target/
+**/target/
 .DS_Store
 .env
 .env.*
@@ -10,3 +10,21 @@ src-tauri/target/
 .backups/
 data/
 media/
+
+# Vault local/private data
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+target/
+**/target/
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+data/
+media/
+backups/
+.DS_Store

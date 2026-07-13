@@ -1,0 +1,1 @@
+{"name":"@vault/domain","version":"0.3.0","type":"module","exports":"./src/index.ts","scripts":{"test":"vitest run"},"dependencies":{"zod":"^3.24.0"},"devDependencies":{"vitest":"^2.1.0"}}

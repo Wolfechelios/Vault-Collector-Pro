@@ -1,0 +1,1 @@
+import{describe,it,expect}from'vitest';import{createBackup,verifyBackup}from'./index';describe('backup',()=>{it('verifies untouched backup',()=>expect(verifyBackup(createBackup([{id:'1'}]))).toBe(true));it('rejects modified backup',()=>{const b=createBackup([{id:'1'}]);b.items.push({id:'2'});expect(verifyBackup(b)).toBe(false)})});
