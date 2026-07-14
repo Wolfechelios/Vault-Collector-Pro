@@ -111,7 +111,7 @@ jobs:
       - name: Install native Tauri and WebDriver dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb
+          sudo apt-get install -y libwebkit2gtk-4.1-dev webkit2gtk-driver libappindicator3-dev librsvg2-dev patchelf xvfb
           cargo install tauri-driver --locked
       - name: Install workspace and Linux Tauri CLI binding
         run: |
