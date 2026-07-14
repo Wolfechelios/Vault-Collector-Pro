@@ -395,7 +395,7 @@ impl SearchRepository {
         let mut values: Vec<Value> = Vec::new();
         if !request.fts_query.trim().is_empty() {
             sql.push_str(" AND i.id IN (SELECT item_id FROM search_documents_fts WHERE search_documents_fts MATCH ?)");
-            values.push(request.fts_query.trim().into());
+            values.push(request.fts_query.trim().to_string().into());
         }
         add_equal_filter(&mut sql, &mut values, "i.category", request.category);
         add_like_filter(&mut sql, &mut values, "d.specifics", request.color);
