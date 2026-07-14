@@ -1,0 +1,15 @@
+PRAGMA foreign_keys = ON;
+CREATE TABLE IF NOT EXISTS storage_nodes(id TEXT PRIMARY KEY,name TEXT NOT NULL,kind TEXT NOT NULL,parent_id TEXT REFERENCES storage_nodes(id),archived INTEGER NOT NULL DEFAULT 0,position INTEGER NOT NULL DEFAULT 0,capacity_limit REAL,capacity_unit TEXT NOT NULL DEFAULT 'items',strict_capacity INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_storage_nodes_parent ON storage_nodes(parent_id,position);
+CREATE TABLE IF NOT EXISTS storage_node_closure(ancestor_id TEXT NOT NULL REFERENCES storage_nodes(id) ON DELETE CASCADE,descendant_id TEXT NOT NULL REFERENCES storage_nodes(id) ON DELETE CASCADE,depth INTEGER NOT NULL,PRIMARY KEY(ancestor_id,descendant_id));
+CREATE TABLE IF NOT EXISTS storage_assignments(item_id TEXT PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE,node_id TEXT NOT NULL REFERENCES storage_nodes(id),assigned_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_storage_assignments_node ON storage_assignments(node_id);
+CREATE TABLE IF NOT EXISTS storage_moves(id TEXT PRIMARY KEY,item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,from_node_id TEXT REFERENCES storage_nodes(id),to_node_id TEXT NOT NULL REFERENCES storage_nodes(id),note TEXT,moved_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_storage_moves_item ON storage_moves(item_id,moved_at DESC);
+CREATE TABLE IF NOT EXISTS storage_labels(id TEXT PRIMARY KEY,node_id TEXT NOT NULL REFERENCES storage_nodes(id) ON DELETE CASCADE,payload TEXT NOT NULL UNIQUE,printed_at TEXT,created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS pricing_provider_accounts(provider_id TEXT PRIMARY KEY,enabled INTEGER NOT NULL DEFAULT 0,credential_ref TEXT,credential_state TEXT NOT NULL DEFAULT 'not-configured',config_json TEXT NOT NULL DEFAULT '{}',last_health TEXT,last_checked_at TEXT,last_success_at TEXT,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS pricing_provider_cache(cache_key TEXT PRIMARY KEY,provider_id TEXT NOT NULL,response_json TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL,stale_allowed INTEGER NOT NULL DEFAULT 1);
+CREATE INDEX IF NOT EXISTS idx_pricing_cache_provider ON pricing_provider_cache(provider_id,expires_at);
+CREATE TABLE IF NOT EXISTS pricing_provider_requests(id TEXT PRIMARY KEY,provider_id TEXT NOT NULL,query TEXT NOT NULL,status TEXT NOT NULL,http_status INTEGER,error_code TEXT,error_message TEXT,result_count INTEGER NOT NULL DEFAULT 0,started_at TEXT NOT NULL,finished_at TEXT,next_retry_at TEXT);
+CREATE TABLE IF NOT EXISTS pricing_refresh_jobs(id TEXT PRIMARY KEY,item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,provider_ids_json TEXT NOT NULL,status TEXT NOT NULL,attempt INTEGER NOT NULL DEFAULT 0,progress INTEGER NOT NULL DEFAULT 0,cancelled INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,started_at TEXT,finished_at TEXT,error_message TEXT);
+CREATE INDEX IF NOT EXISTS idx_pricing_refresh_jobs_status ON pricing_refresh_jobs(status,created_at);
