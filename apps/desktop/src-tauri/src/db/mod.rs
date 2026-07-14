@@ -9,6 +9,7 @@ const INITIAL_SCHEMA: &str = include_str!("../../migrations/0001_initial.sql");
 const PLATFORM_SCHEMA: &str = include_str!("../../migrations/0002_platform.sql");
 const CAPTURE_SCHEMA: &str = include_str!("../../migrations/0003_capture_intelligence.sql");
 const VALUATION_MARKETPLACE_SCHEMA: &str = include_str!("../../migrations/0004_valuation_marketplace.sql");
+const STORAGE_PRICING_SCHEMA: &str = include_str!("../../migrations/0005_storage_pricing_adapters.sql");
 
 #[derive(Debug, Error)]
 pub enum DatabaseError {
@@ -31,6 +32,7 @@ pub fn open_database(path: &Path) -> Result<Connection, DatabaseError> {
     connection.execute_batch(PLATFORM_SCHEMA)?;
     connection.execute_batch(CAPTURE_SCHEMA)?;
     connection.execute_batch(VALUATION_MARKETPLACE_SCHEMA)?;
+    connection.execute_batch(STORAGE_PRICING_SCHEMA)?;
     Ok(connection)
 }
 
@@ -57,6 +59,13 @@ mod tests {
     fn migration_creates_valuation_marketplace_tables() {
         let connection = open_database(Path::new(":memory:")).expect("database should initialize");
         for table in ["valuation_snapshots", "sale_comparables", "marketplace_drafts", "pricing_providers", "price_alerts"] {
+            assert_eq!(table_exists(&connection, table), 1, "missing table {table}");
+        }
+    }
+    #[test]
+    fn migration_creates_storage_and_pricing_adapter_tables() {
+        let connection = open_database(Path::new(":memory:")).expect("database should initialize");
+        for table in ["storage_nodes", "storage_node_closure", "storage_assignments", "storage_moves", "storage_labels", "pricing_provider_accounts", "pricing_provider_cache", "pricing_provider_requests", "pricing_refresh_jobs"] {
             assert_eq!(table_exists(&connection, table), 1, "missing table {table}");
         }
     }
