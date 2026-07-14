@@ -84,9 +84,9 @@ export function deriveCorrectionRules(
       const createdAt = rows.map((row) => row.createdAt).sort()[0];
       const updatedAt = rows.map((row) => row.createdAt).sort().at(-1) as string;
       const conditions: Record<string, string> = {
-        field: first.field,
-        value: first.proposedValue
+        field: first.field
       };
+      if (kind !== 'storage') conditions.value = first.proposedValue;
       if (first.category) conditions.category = first.category;
       return {
         id: `rule:${kind}:${slug(first.field)}:${slug(first.proposedValue)}:${slug(finalValue)}`,
@@ -102,6 +102,22 @@ export function deriveCorrectionRules(
       };
     })
     .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+export function recommendStorage(
+  input: { category: string; currentValue: string; protected: boolean },
+  rules: CorrectionRule[]
+): { value: string; influencedByRuleIds: string[]; disposition: 'flagged' } | null {
+  if (input.protected || input.currentValue.trim()) return null;
+  const matches = [...rules]
+    .filter((rule) => rule.enabled && rule.kind === 'storage')
+    .filter((rule) => rule.conditions.field === 'storagePath')
+    .filter((rule) => !rule.conditions.category || normalize(rule.conditions.category) === normalize(input.category))
+    .filter((rule) => Boolean(rule.action.value?.trim()))
+    .sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id));
+  const winner = matches[0];
+  if (!winner) return null;
+  return { value: winner.action.value.trim(), influencedByRuleIds: [winner.id], disposition: 'flagged' };
 }
 
 export function applyLearningRules(

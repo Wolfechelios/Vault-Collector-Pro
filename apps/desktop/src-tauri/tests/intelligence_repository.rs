@@ -8,6 +8,7 @@ use vault_catalogue_lib::db::{
     models::ItemDraft,
     open_database,
 };
+use vault_catalogue_lib::background::BackgroundIndexer;
 
 fn draft() -> ItemDraft {
     ItemDraft {
@@ -175,4 +176,70 @@ fn leaves_deferred_inference_fields_unprotected_until_analysis_is_recorded() {
     assert!(!state.iter().any(|row| row.field_name == "brand"));
     assert!(!state.iter().any(|row| row.field_name == "model"));
     assert!(!item.specifics.contains_key("__inferredFields"));
+}
+
+#[test]
+fn storage_rules_fill_only_unassigned_items_and_keep_attribution() {
+    let mut connection = open_database(std::path::Path::new(":memory:")).unwrap();
+    let mut unassigned = draft();
+    unassigned.specifics.remove("storagePath");
+    let item = ItemRepository::create(&mut connection, unassigned).unwrap();
+    IntelligenceRepository::upsert_rule(&connection, CorrectionRuleRecord {
+        id: "storage-tools".into(), rule_kind: "storage".into(),
+        conditions_json: r#"{"field":"storagePath","category":"tools"}"#.into(),
+        action_json: r#"{"value":"Garage / Shelf B"}"#.into(), priority: 100,
+        evidence_count: 2, enabled: true, explanation: "Store tools on Shelf B".into(),
+        created_at: "2026-07-14T12:00:00.000Z".into(), updated_at: "2026-07-14T12:00:00.000Z".into(),
+    }).unwrap();
+
+    assert_eq!(IntelligenceRepository::apply_storage_rules(&mut connection).unwrap(), 1);
+    let updated = ItemRepository::get(&connection, &item.id).unwrap().unwrap();
+    assert_eq!(updated.specifics.get("storagePath").map(String::as_str), Some("Garage / Shelf B"));
+    let state = IntelligenceRepository::get_field_state(&connection, &item.id).unwrap();
+    assert!(state.iter().any(|row| row.field_name == "storagePath" && !row.protected && row.verification_state == "flagged"));
+    let influenced: String = connection.query_row(
+        "SELECT influenced_rule_ids_json FROM field_suggestions WHERE item_id=?1 AND field_name='storagePath'",
+        [&item.id], |row| row.get(0),
+    ).unwrap();
+    assert_eq!(influenced, r#"["storage-tools"]"#);
+}
+
+#[test]
+fn rejects_invalid_rule_shapes_without_replacing_the_saved_rule() {
+    let connection = open_database(std::path::Path::new(":memory:")).unwrap();
+    let valid = CorrectionRuleRecord {
+        id: "storage-tools".into(), rule_kind: "storage".into(),
+        conditions_json: r#"{"field":"storagePath","category":"tools"}"#.into(),
+        action_json: r#"{"value":"Garage / Shelf B"}"#.into(), priority: 100,
+        evidence_count: 2, enabled: true, explanation: "Store tools on Shelf B".into(),
+        created_at: "2026-07-14T12:00:00.000Z".into(), updated_at: "2026-07-14T12:00:00.000Z".into(),
+    };
+    IntelligenceRepository::upsert_rule(&connection, valid.clone()).unwrap();
+    let mut invalid = valid;
+    invalid.conditions_json = r#"{"field":"brand"}"#.into();
+    invalid.action_json = r#"{"value":""}"#.into();
+    assert!(IntelligenceRepository::upsert_rule(&connection, invalid).is_err());
+    assert_eq!(IntelligenceRepository::list_rules(&connection).unwrap()[0].action_json, r#"{"value":"Garage / Shelf B"}"#);
+}
+
+#[test]
+fn background_indexer_drains_the_durable_queue_without_a_search_command() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("background-index.sqlite3");
+    let mut connection = open_database(&path).unwrap();
+    let item = ItemRepository::create(&mut connection, draft()).unwrap();
+    drop(connection);
+
+    let indexer = BackgroundIndexer::start(path.clone());
+    indexer.notify();
+    let mut indexed = false;
+    for _ in 0..50 {
+        let connection = open_database(&path).unwrap();
+        indexed = connection.query_row(
+            "SELECT count(*) FROM search_documents WHERE item_id=?1", [&item.id], |row| row.get::<_,i64>(0),
+        ).unwrap() == 1;
+        if indexed { break; }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert!(indexed, "background worker did not drain the reindex queue");
 }
