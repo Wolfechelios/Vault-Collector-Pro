@@ -21,6 +21,6 @@ export function MobileApp({initialTab='capture'}:{initialTab?:Tab}) { const[tab,
     {tab==='review'&&<MobileScanReview suggestions={suggestions} evidence={evidence} onDecision={(id,action,value)=>void append('suggestion-decision',id,{action,value})}/>} 
     {tab==='search'&&<MobileSearch items={items} onSave={query=>void append('saved-search',`search-${Date.now()}`,{query})}/>} 
     {tab==='collections'&&<MobileCollections items={items} suggestions={suggestions}/>} 
-    {tab==='rules'&&<MobileRules rules={rules} onChange={rule=>void append('rule-edit',rule.id,rule)}/>} 
+    {tab==='rules'&&<MobileRules rules={rules} onChange={rule=>void append(rule._operation==='delete'?'rule-delete':'rule-edit',rule.id,rule)}/>}
   </div><nav className="tabs">{(['capture','review','search','collections','rules'] as Tab[]).map(name=><button key={name} aria-current={tab===name?'page':undefined} onClick={()=>setTab(name)}>{name[0].toUpperCase()+name.slice(1)}</button>)}</nav></main>;
 }

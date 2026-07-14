@@ -9,6 +9,8 @@ describe('mobile rules', () => {
     expect(html).toContain('Garage / Shelf B');
     expect(html).toContain('Category');
     expect(html).toContain('Save rule');
+    expect(html).toContain('Disable rule');
+    expect(html).toContain('Remove rule');
     expect(html).toContain('2 accepted corrections');
   });
 });
