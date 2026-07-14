@@ -18,12 +18,23 @@ jobs:
           cache: npm
       - name: Install workspace dependencies
         run: npm install --no-audit --no-fund
+      - name: Reject committed provider secrets
+        shell: bash
+        run: |
+          if git grep -nEI '(client[_-]?secret|api[_-]?key|access[_-]?token)[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._~-]{16,}' -- ':!package-lock.json' ':!docs/**'; then
+            echo 'Potential provider credential committed to source.'
+            exit 1
+          fi
       - name: Test desktop
         run: npm run test --workspace @vault/desktop
       - name: Test capture intelligence
         run: npm run test --workspace @vault/capture
       - name: Test marketplace intelligence
         run: npm run test --workspace @vault/marketplace
+      - name: Test storage management
+        run: npm run test --workspace @vault/storage-management
+      - name: Test pricing adapters
+        run: npm run test --workspace @vault/pricing-adapters
       - name: Test domain
         run: npm run test --workspace @vault/domain
       - name: Test storage
