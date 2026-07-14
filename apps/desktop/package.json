@@ -1,7 +1,7 @@
 {
   "name": "@vault/desktop",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite --mode desktop",
@@ -15,6 +15,7 @@
     "@vault/capture": "0.5.0",
     "@vault/domain": "0.3.0",
     "@vault/importer": "0.3.0",
+    "@vault/marketplace": "0.6.0",
     "@vault/storage": "0.3.0",
     "@vault/ui": "0.3.0",
     "@vault/vision": "0.4.0",

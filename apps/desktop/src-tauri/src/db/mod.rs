@@ -8,6 +8,7 @@ use thiserror::Error;
 const INITIAL_SCHEMA: &str = include_str!("../../migrations/0001_initial.sql");
 const PLATFORM_SCHEMA: &str = include_str!("../../migrations/0002_platform.sql");
 const CAPTURE_SCHEMA: &str = include_str!("../../migrations/0003_capture_intelligence.sql");
+const VALUATION_MARKETPLACE_SCHEMA: &str = include_str!("../../migrations/0004_valuation_marketplace.sql");
 
 #[derive(Debug, Error)]
 pub enum DatabaseError {
@@ -29,6 +30,7 @@ pub fn open_database(path: &Path) -> Result<Connection, DatabaseError> {
     connection.execute_batch(INITIAL_SCHEMA)?;
     connection.execute_batch(PLATFORM_SCHEMA)?;
     connection.execute_batch(CAPTURE_SCHEMA)?;
+    connection.execute_batch(VALUATION_MARKETPLACE_SCHEMA)?;
     Ok(connection)
 }
 
@@ -48,6 +50,13 @@ mod tests {
     fn migration_creates_capture_intelligence_tables() {
         let connection = open_database(Path::new(":memory:")).expect("database should initialize");
         for table in ["capture_jobs", "item_photos", "paired_devices", "capture_sessions", "duplicate_matches"] {
+            assert_eq!(table_exists(&connection, table), 1, "missing table {table}");
+        }
+    }
+    #[test]
+    fn migration_creates_valuation_marketplace_tables() {
+        let connection = open_database(Path::new(":memory:")).expect("database should initialize");
+        for table in ["valuation_snapshots", "sale_comparables", "marketplace_drafts", "pricing_providers", "price_alerts"] {
             assert_eq!(table_exists(&connection, table), 1, "missing table {table}");
         }
     }
