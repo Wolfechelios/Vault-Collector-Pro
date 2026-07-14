@@ -13,4 +13,21 @@ describe('item form', () => {
     expect(draft.purchasePrice?.amountMinor).toBe(1234);
     expect(draft.medianValue?.amountMinor).toBe(5678);
   });
+
+  it('preserves dynamic specifics and records manually protected fields', () => {
+    const draft = formToDraft({
+      ...emptyItemForm,
+      title: 'DeWalt drill',
+      category: 'tools',
+      specifics: { voltage: '20V', customKey: 'preserve me' },
+      protectedFields: ['voltage']
+    });
+    expect(draft.specifics).toMatchObject({ voltage: '20V', customKey: 'preserve me' });
+    expect(JSON.parse(draft.specifics.__protectedFields)).toEqual(['voltage']);
+  });
+
+  it('carries deferred inference provenance until a new item is persisted', () => {
+    const draft = formToDraft({ ...emptyItemForm, title: 'Yellow DeWalt drill', inferredFields: ['brand', 'model'] });
+    expect(JSON.parse(draft.specifics.__inferredFields)).toEqual(['brand', 'model']);
+  });
 });

@@ -9,6 +9,7 @@ pub struct ItemRepository;
 impl ItemRepository {
     pub fn create(connection: &mut Connection, draft: ItemDraft) -> Result<ItemRecord, DatabaseError> {
         validate_draft(&draft)?;
+        let protected_draft = draft.clone();
         let transaction = connection.transaction()?;
         let now = Utc::now().to_rfc3339();
         let id = draft.id.clone().unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -34,6 +35,7 @@ impl ItemRepository {
             ],
         )?;
         replace_specifics(&transaction, &id, &draft.specifics)?;
+        protect_draft_fields(&transaction, &id, &protected_draft, &now)?;
         transaction.commit()?;
         Self::get(connection, &id)?.ok_or_else(|| DatabaseError::NotFound(id))
     }
@@ -61,6 +63,7 @@ impl ItemRepository {
 
     pub fn update(connection: &mut Connection, id: &str, draft: ItemDraft) -> Result<ItemRecord, DatabaseError> {
         validate_draft(&draft)?;
+        let protected_draft = draft.clone();
         if Self::get(connection, id)?.is_none() {
             return Err(DatabaseError::NotFound(id.to_string()));
         }
@@ -83,6 +86,7 @@ impl ItemRepository {
                 trim_option(draft.storage_location_id),draft.acquired_at,trim_option(draft.notes),now],
         )?;
         replace_specifics(&transaction, id, &draft.specifics)?;
+        protect_draft_fields(&transaction, id, &protected_draft, &now)?;
         transaction.commit()?;
         Self::get(connection, id)?.ok_or_else(|| DatabaseError::NotFound(id.to_string()))
     }
@@ -139,8 +143,84 @@ fn make_money(amount: Option<i64>, currency: Option<String>) -> Option<Money> { 
 
 fn replace_specifics(transaction: &Transaction<'_>, item_id: &str, specifics: &BTreeMap<String,String>) -> Result<(), DatabaseError> {
     transaction.execute("DELETE FROM item_specifics WHERE item_id=?1", [item_id])?;
-    for (key, value) in specifics { if !key.trim().is_empty() && !value.trim().is_empty() { transaction.execute("INSERT INTO item_specifics(item_id,key,value) VALUES(?1,?2,?3)", params![item_id,key.trim(),value.trim()])?; } }
+    for (key, value) in specifics { if key != "__inferredFields" && !key.trim().is_empty() && !value.trim().is_empty() { transaction.execute("INSERT INTO item_specifics(item_id,key,value) VALUES(?1,?2,?3)", params![item_id,key.trim(),value.trim()])?; } }
     Ok(())
+}
+
+fn protect_draft_fields(
+    transaction: &Transaction<'_>,
+    item_id: &str,
+    draft: &ItemDraft,
+    now: &str,
+) -> Result<(), DatabaseError> {
+    let inferred_fields = draft
+        .specifics
+        .get("__inferredFields")
+        .and_then(|value| serde_json::from_str::<Vec<String>>(value).ok())
+        .unwrap_or_default();
+    let mut fields = vec![
+        ("title", Some(draft.title.as_str())),
+        ("category", Some(draft.category.as_str())),
+        ("condition", Some(draft.condition.as_str())),
+        ("brand", draft.brand.as_deref()),
+        ("model", draft.model.as_deref()),
+        ("serialNumber", draft.serial_number.as_deref()),
+        ("sku", draft.sku.as_deref()),
+        ("edition", draft.edition.as_deref()),
+    ];
+    let year = draft.year.map(|value| value.to_string());
+    fields.push(("year", year.as_deref()));
+
+    for (field_name, value) in fields {
+        if !inferred_fields.iter().any(|inferred| inferred == field_name) {
+            if let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) {
+                upsert_protected_field(transaction, item_id, field_name, value, now)?;
+            }
+        }
+    }
+
+    for (field_name, value) in &draft.specifics {
+        if !is_system_specific(field_name)
+            && !inferred_fields.iter().any(|inferred| inferred == field_name)
+            && !value.trim().is_empty()
+        {
+            upsert_protected_field(transaction, item_id, field_name.trim(), value.trim(), now)?;
+        }
+    }
+    Ok(())
+}
+
+fn upsert_protected_field(
+    transaction: &Transaction<'_>,
+    item_id: &str,
+    field_name: &str,
+    value: &str,
+    now: &str,
+) -> Result<(), DatabaseError> {
+    transaction.execute(
+        "INSERT INTO item_field_state(
+            item_id,field_name,value,source,protected,verification_state,confidence,
+            evidence_ids_json,suggestion_id,updated_at
+         ) VALUES(?1,?2,?3,'user',1,'verified',NULL,'[]',NULL,?4)
+         ON CONFLICT(item_id,field_name) DO UPDATE SET
+            value=excluded.value,source='user',protected=1,verification_state='verified',
+            confidence=NULL,evidence_ids_json='[]',suggestion_id=NULL,updated_at=excluded.updated_at",
+        params![item_id, field_name, value, now],
+    )?;
+    Ok(())
+}
+
+fn is_system_specific(field_name: &str) -> bool {
+    matches!(
+        field_name,
+        "photos"
+            | "photoMetadata"
+            | "phoneCaptureId"
+            | "capturedAt"
+            | "__protectedFields"
+            | "__inferredFields"
+            | "ocrText"
+    )
 }
 fn load_specifics(connection: &Connection, item_id: &str) -> Result<BTreeMap<String,String>, DatabaseError> {
     let mut statement = connection.prepare("SELECT key,value FROM item_specifics WHERE item_id=?1 ORDER BY key")?;

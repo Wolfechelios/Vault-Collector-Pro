@@ -1,6 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { ItemRecord } from '@vault/domain';
 import type { VisionResult } from '@vault/domain';
+import type { FieldSuggestion, ItemFieldState, ScanEvidence } from '@vault/domain';
+import type { CorrectionRule } from '@vault/learning';
+import type { ParsedSearchQuery } from '@vault/search';
 
 export type ItemDraft = {
   id?: string;
@@ -30,10 +33,118 @@ export type ItemDraft = {
 
 export type SearchRequest = { query: string; category: string | null; status: string | null; limit: number; offset: number };
 
+export type ReviewSuggestion = Omit<FieldSuggestion, 'field'> & { fieldName: string };
+export type EvidenceRecord = Omit<ScanEvidence, 'field' | 'bounds'> & {
+  fieldName: string;
+  boundsJson: string | null;
+};
+export type FieldStateRecord = Omit<ItemFieldState, 'field'> & { fieldName: string };
+export type RuleRecord = {
+  id: string;
+  ruleKind: CorrectionRule['kind'];
+  conditionsJson: string;
+  actionJson: string;
+  priority: number;
+  evidenceCount: number;
+  enabled: boolean;
+  explanation: string;
+  createdAt: string;
+  updatedAt: string;
+};
+export type SavedSearchRecord = {
+  id: string; name: string; queryText: string; parsedQueryJson: string;
+  isSmartCollection: boolean; createdAt: string; updatedAt: string;
+};
+export type SearchHistoryRecord = {
+  id: string; queryText: string; parsedQueryJson: string; resultCount: number; searchedAt: string;
+};
+
+const evidenceForRust = (row: ScanEvidence) => ({
+  id: row.id,
+  scanId: row.scanId,
+  itemId: row.itemId ?? null,
+  fieldName: row.field,
+  value: row.value,
+  normalizedValue: row.normalizedValue,
+  confidence: row.confidence,
+  sourceKind: row.sourceKind,
+  sourceMediaId: row.sourceMediaId,
+  rawText: row.rawText,
+  boundsJson: row.bounds ? JSON.stringify(row.bounds) : null,
+  provider: row.provider ?? null,
+  createdAt: row.createdAt
+});
+
+const suggestionForRust = (row: FieldSuggestion) => ({
+  id: row.id,
+  itemId: row.itemId,
+  fieldName: row.field,
+  proposedValue: row.proposedValue,
+  confidence: row.confidence,
+  disposition: row.disposition,
+  evidenceIds: row.evidenceIds,
+  conflictingEvidenceIds: row.conflictingEvidenceIds,
+  influencedRuleIds: row.influencedByRuleIds,
+  verificationState: row.verificationState,
+  status: row.status,
+  protectedValue: row.protectedValue ?? null,
+  createdAt: row.createdAt
+});
+
+const intelligentRequest = (parsed: ParsedSearchQuery) => ({
+  ftsQuery: parsed.ftsQuery,
+  category: parsed.filters.category ?? null,
+  color: parsed.filters.color ?? null,
+  brand: parsed.filters.brand ?? null,
+  yearOperator: parsed.filters.year?.operator ?? null,
+  yearValue: parsed.filters.year?.value ?? null,
+  valueOperator: parsed.filters.valueMinor?.operator ?? null,
+  valueMinor: parsed.filters.valueMinor?.value ?? null,
+  quantityOperator: parsed.filters.quantity?.operator ?? null,
+  quantityValue: parsed.filters.quantity?.value ?? null,
+  status: parsed.filters.status ?? null,
+  condition: parsed.filters.condition ?? null,
+  location: parsed.filters.location ?? null,
+  listed: parsed.filters.listed ?? null,
+  missingPhotos: parsed.filters.missingPhotos ?? null,
+  reviewNeeded: parsed.filters.reviewNeeded ?? null,
+  unpriced: parsed.filters.unpriced ?? null,
+  unassigned: parsed.filters.unassigned ?? null,
+  duplicate: parsed.filters.duplicate ?? null,
+  limit: 2000
+});
+
 export const catalogueApi = {
   search: (request: SearchRequest) => invoke<ItemRecord[]>('search_items', { request }),
   create: (draft: ItemDraft) => invoke<ItemRecord>('create_item', { draft }),
   update: (id: string, draft: ItemDraft) => invoke<ItemRecord>('update_item', { id, draft }),
   archive: (id: string) => invoke<void>('archive_item', { id }),
-  analyzeImage: (dataUrl: string) => invoke<VisionResult>('analyze_image', { dataUrl })
+  analyzeImage: (dataUrl: string) => invoke<VisionResult>('analyze_image', { dataUrl }),
+  recordAnalysis: (evidence: ScanEvidence[], suggestions: FieldSuggestion[]) => invoke<void>(
+    'record_intelligence_analysis',
+    { evidence: evidence.map(evidenceForRust), suggestions: suggestions.map(suggestionForRust) }
+  ),
+  reviewQueue: () => invoke<ReviewSuggestion[]>('list_review_queue'),
+  evidence: (itemId: string) => invoke<EvidenceRecord[]>('list_item_evidence', { itemId }),
+  fieldState: (itemId: string) => invoke<FieldStateRecord[]>('get_item_field_state', { itemId }),
+  decideSuggestion: (id: string, action: 'automatic' | 'accept' | 'edit' | 'reject', value?: string) =>
+    invoke<void>('decide_field_suggestion', { id, decision: { action, value: value ?? null } }),
+  learningRules: () => invoke<RuleRecord[]>('list_learning_rules'),
+  upsertLearningRule: (rule: RuleRecord) => invoke<void>('upsert_learning_rule', { rule }),
+  deleteLearningRule: (id: string) => invoke<void>('delete_learning_rule', { id }),
+  intelligentSearch: async (parsed: ParsedSearchQuery) => {
+    const results = await invoke<ItemRecord[]>('intelligent_search', { request: intelligentRequest(parsed) });
+    await invoke<void>('record_search_history', {
+      queryText: parsed.original,
+      parsedJson: JSON.stringify(parsed),
+      resultCount: results.length
+    });
+    return results;
+  },
+  saveSearch: (id: string, name: string, parsed: ParsedSearchQuery, smart = false) => invoke<void>(
+    'save_intelligent_search',
+    { id, name, queryText: parsed.original, parsedJson: JSON.stringify(parsed), smart }
+  ),
+  savedSearches: () => invoke<SavedSearchRecord[]>('list_saved_searches'),
+  searchHistory: (limit = 20) => invoke<SearchHistoryRecord[]>('list_search_history', { limit })
 };
