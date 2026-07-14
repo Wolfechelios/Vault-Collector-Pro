@@ -12,6 +12,7 @@ const PLATFORM_SCHEMA: &str = include_str!("../../migrations/0002_platform.sql")
 const CAPTURE_SCHEMA: &str = include_str!("../../migrations/0003_capture_intelligence.sql");
 const VALUATION_MARKETPLACE_SCHEMA: &str = include_str!("../../migrations/0004_valuation_marketplace.sql");
 const INVENTORY_INTELLIGENCE_SCHEMA: &str = include_str!("../../migrations/0005_inventory_intelligence.sql");
+const MOBILE_INTELLIGENCE_SCHEMA: &str = include_str!("../../migrations/0006_mobile_intelligence.sql");
 
 #[derive(Debug, Error)]
 pub enum DatabaseError {
@@ -39,6 +40,7 @@ pub fn open_database(path: &Path) -> Result<Connection, DatabaseError> {
     connection.execute_batch(CAPTURE_SCHEMA)?;
     connection.execute_batch(VALUATION_MARKETPLACE_SCHEMA)?;
     connection.execute_batch(INVENTORY_INTELLIGENCE_SCHEMA)?;
+    connection.execute_batch(MOBILE_INTELLIGENCE_SCHEMA)?;
     Ok(connection)
 }
 
@@ -79,6 +81,8 @@ mod tests {
         ] {
             assert_eq!(table_exists(&connection, table), 1, "missing table {table}");
         }
+        assert_eq!(table_exists(&connection, "vault_identity"), 1);
+        assert_eq!(table_exists(&connection, "applied_mobile_changes"), 1);
         connection.execute(
             "INSERT INTO search_documents_fts(item_id,title,description,ocr_text,identifiers,notes,specifics,category,condition_text,location) VALUES(?1,?2,'','','','','','','','')",
             ("item-1", "Yellow DeWalt drill"),

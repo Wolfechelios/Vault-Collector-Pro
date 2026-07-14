@@ -1,0 +1,3 @@
+import React from 'react';
+import type { IntelligenceSnapshot } from '@vault/intelligence-sync';
+export function BundleExchange({onImport,onExport,status}:{onImport:(bundle:IntelligenceSnapshot)=>Promise<void>;onExport:()=>Promise<void>;status:string}) { return <aside className="exchange"><label>Import desktop snapshot<input type="file" accept="application/json" onChange={async e=>{const file=e.target.files?.[0];if(file)await onImport(JSON.parse(await file.text()));}}/></label><button onClick={()=>confirm('This file contains private inventory data. Continue?')&&void onExport()}>Export mobile changes</button><small>{status}</small></aside>; }

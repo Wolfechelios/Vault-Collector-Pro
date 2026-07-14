@@ -8,8 +8,10 @@ target/
 !.env.example
 *.log
 .backups/
-data/
+/data/
 media/
+apps/desktop/e2e/artifacts/
+.e2e-data/
 
 # Vault local/private data
 node_modules/
@@ -24,7 +26,7 @@ target/
 *.db
 *.db-shm
 *.db-wal
-data/
+/data/
 media/
 backups/
 .DS_Store

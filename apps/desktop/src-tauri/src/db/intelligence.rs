@@ -2,6 +2,7 @@ use super::DatabaseError;
 use chrono::Utc;
 use rusqlite::{params, params_from_iter, types::Value, Connection, OptionalExtension, Transaction};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -388,6 +389,127 @@ impl IntelligenceRepository {
         }
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MobileImportResult {
+    pub applied: usize,
+    pub duplicates: usize,
+    pub conflicts: usize,
+    pub revision: i64,
+}
+
+impl IntelligenceRepository {
+    pub fn export_intelligence_snapshot(connection: &Connection) -> Result<String, DatabaseError> {
+        use super::items::ItemRepository;
+        let (vault_id, revision): (String, i64) = connection.query_row(
+            "SELECT vault_id,intelligence_revision FROM vault_identity WHERE singleton=1", [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        let item_ids = {
+            let mut statement = connection.prepare("SELECT id FROM items ORDER BY id")?;
+            statement.query_map([], |row| row.get::<_,String>(0))?.collect::<Result<Vec<_>,_>>()?
+        };
+        let mut items = Vec::new();
+        let mut evidence = Vec::new();
+        let mut suggestions = Vec::new();
+        let mut field_state = Vec::new();
+        for id in item_ids {
+            if let Some(item) = ItemRepository::get(connection, &id)? { items.push(serde_json::to_value(item)?); }
+            evidence.extend(Self::list_evidence(connection, &id)?.into_iter().map(serde_json::to_value).collect::<Result<Vec<_>,_>>()?);
+            field_state.extend(Self::get_field_state(connection, &id)?.into_iter().map(serde_json::to_value).collect::<Result<Vec<_>,_>>()?);
+            let mut statement = connection.prepare(
+                "SELECT id,item_id,field_name,proposed_value,confidence,disposition,evidence_ids_json,conflicting_evidence_ids_json,influenced_rule_ids_json,verification_state,status,protected_value,created_at,decided_at FROM field_suggestions WHERE item_id=?1 ORDER BY created_at,id"
+            )?;
+            suggestions.extend(statement.query_map([&id], row_to_suggestion)?.collect::<Result<Vec<_>,_>>()?.into_iter().map(serde_json::to_value).collect::<Result<Vec<_>,_>>()?);
+        }
+        let rules = Self::list_rules(connection)?.into_iter().map(serde_json::to_value).collect::<Result<Vec<_>,_>>()?;
+        let saved_searches = SearchRepository::list_saved_searches(connection)?.into_iter().map(serde_json::to_value).collect::<Result<Vec<_>,_>>()?;
+        let exported_at = Utc::now().to_rfc3339();
+        let body = serde_json::json!({
+            "format":"vault-intelligence-snapshot","version":1,"vaultId":vault_id,
+            "revision":revision,"exportedAt":exported_at,
+            "payload":{"items":items,"evidence":evidence,"suggestions":suggestions,"fieldState":field_state,"rules":rules,"savedSearches":saved_searches}
+        });
+        let checksum = json_checksum(&body)?;
+        let mut envelope = body;
+        envelope.as_object_mut().expect("snapshot is object").insert("checksum".into(), serde_json::Value::String(checksum));
+        Ok(serde_json::to_string_pretty(&envelope)?)
+    }
+
+    pub fn import_mobile_changes(connection: &mut Connection, bundle_json: &str) -> Result<MobileImportResult, DatabaseError> {
+        let mut envelope: serde_json::Value = serde_json::from_str(bundle_json)?;
+        let object = envelope.as_object_mut().ok_or_else(|| DatabaseError::Validation("mobile bundle must be an object".into()))?;
+        if object.get("format").and_then(|value| value.as_str()) != Some("vault-mobile-changes") || object.get("version").and_then(|value| value.as_i64()) != Some(1) {
+            return Err(DatabaseError::Validation("unsupported mobile change bundle".into()));
+        }
+        let supplied_checksum = object.remove("checksum").and_then(|value| value.as_str().map(str::to_string)).ok_or_else(|| DatabaseError::Validation("mobile bundle checksum is required".into()))?;
+        if json_checksum(&envelope)? != supplied_checksum { return Err(DatabaseError::Validation("mobile bundle checksum does not match".into())); }
+        let vault_id = envelope.get("vaultId").and_then(|value| value.as_str()).unwrap_or_default();
+        let current_vault: String = connection.query_row("SELECT vault_id FROM vault_identity WHERE singleton=1", [], |row| row.get(0))?;
+        if vault_id != current_vault { return Err(DatabaseError::Validation("mobile bundle belongs to a different vault".into())); }
+        let changes = envelope.get("changes").and_then(|value| value.as_array()).cloned().ok_or_else(|| DatabaseError::Validation("mobile bundle changes are malformed".into()))?;
+        let mut ids = std::collections::HashSet::new();
+        for change in &changes {
+            let id = change.get("id").and_then(|value| value.as_str()).unwrap_or_default();
+            if id.is_empty() || !ids.insert(id.to_string()) { return Err(DatabaseError::Validation("duplicate or empty mobile change id".into())); }
+        }
+        let transaction = connection.transaction()?;
+        let mut applied = 0;
+        let mut duplicates = 0;
+        let mut conflicts = 0;
+        for change in changes {
+            let id = change.get("id").and_then(|value| value.as_str()).unwrap_or_default();
+            let already_applied: i64 = transaction.query_row("SELECT count(*) FROM applied_mobile_changes WHERE change_id=?1", [id], |row| row.get(0))?;
+            if already_applied > 0 { duplicates += 1; continue; }
+            let kind = change.get("kind").and_then(|value| value.as_str()).unwrap_or_default();
+            let record_id = change.get("recordId").and_then(|value| value.as_str()).unwrap_or_default();
+            let value = change.get("value").cloned().unwrap_or_default();
+            match kind {
+                "suggestion-decision" => {
+                    let action = value.get("action").and_then(|row| row.as_str()).unwrap_or_else(|| value.as_str().unwrap_or("reject"));
+                    if action == "reject" {
+                        transaction.execute("UPDATE field_suggestions SET status='rejected',verification_state='rejected',decided_at=?2 WHERE id=?1", params![record_id,Utc::now().to_rfc3339()])?;
+                    } else {
+                        let (item_id, field, proposed, protected): (String,String,String,Option<String>) = transaction.query_row(
+                            "SELECT item_id,field_name,proposed_value,protected_value FROM field_suggestions WHERE id=?1", [record_id],
+                            |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?)),
+                        )?;
+                        let final_value = value.get("value").and_then(|row| row.as_str()).unwrap_or(&proposed);
+                        if protected.as_deref().is_some_and(|current| !current.eq_ignore_ascii_case(final_value)) {
+                            conflicts += 1;
+                        } else {
+                            update_item_field(&transaction, &item_id, &field, final_value)?;
+                            transaction.execute("UPDATE field_suggestions SET proposed_value=?2,status='accepted',verification_state='verified',decided_at=?3 WHERE id=?1", params![record_id,final_value,Utc::now().to_rfc3339()])?;
+                            applied += 1;
+                        }
+                    }
+                }
+                "rule-edit" => {
+                    let rule: CorrectionRuleRecord = serde_json::from_value(value)?;
+                    validate_rule(&rule)?;
+                    transaction.execute(
+                        "INSERT INTO correction_rules(id,rule_kind,conditions_json,action_json,priority,evidence_count,enabled,explanation,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) ON CONFLICT(id) DO UPDATE SET conditions_json=excluded.conditions_json,action_json=excluded.action_json,priority=excluded.priority,enabled=excluded.enabled,explanation=excluded.explanation,updated_at=excluded.updated_at",
+                        params![rule.id,rule.rule_kind,rule.conditions_json,rule.action_json,rule.priority,rule.evidence_count,if rule.enabled{1}else{0},rule.explanation,rule.created_at,rule.updated_at],
+                    )?;
+                    applied += 1;
+                }
+                "saved-search" | "capture" => { applied += 1; }
+                _ => { conflicts += 1; }
+            }
+            transaction.execute("INSERT INTO applied_mobile_changes(change_id,bundle_checksum,applied_at) VALUES(?1,?2,?3)", params![id,supplied_checksum,Utc::now().to_rfc3339()])?;
+        }
+        transaction.execute("UPDATE vault_identity SET intelligence_revision=intelligence_revision+1,updated_at=?1 WHERE singleton=1", [Utc::now().to_rfc3339()])?;
+        let revision: i64 = transaction.query_row("SELECT intelligence_revision FROM vault_identity WHERE singleton=1", [], |row| row.get(0))?;
+        transaction.commit()?;
+        Ok(MobileImportResult { applied, duplicates, conflicts, revision })
+    }
+}
+
+fn json_checksum(value: &serde_json::Value) -> Result<String, DatabaseError> {
+    let bytes = serde_json::to_vec(value)?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
 }
 
 pub struct SearchRepository;
