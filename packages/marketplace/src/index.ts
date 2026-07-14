@@ -50,8 +50,12 @@ export type ShippingRecommendation = {
 const nowIso = () => new Date().toISOString();
 const uid = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
 const parsePhotos = (item: ItemRecord): string[] => {
-  try { const value = JSON.parse(item.specifics.photos ?? '[]'); return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []; }
-  catch { return []; }
+  try {
+    const value = JSON.parse(item.specifics.photos ?? '[]');
+    return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+  } catch {
+    return [];
+  }
 };
 const clean = (value?: string | null) => value?.trim() ?? '';
 const titleParts = (item: ItemRecord) => [item.brand, item.model, item.year, item.edition, item.title].filter(Boolean).map(String);
@@ -72,10 +76,15 @@ export async function collectComparables(providers: ComparableProvider[], item: 
 }
 
 export function valueItem(item: ItemRecord, results: ProviderResult[]): ValuationSnapshot {
+  const query = buildValuationQuery(item);
   const comparables = results.flatMap(result => result.comparables.map(row => ({ ...row, provider: row.provider || result.provider })));
   return {
-    id: uid('valuation'), itemId: item.id, capturedAt: nowIso(), query: buildValuationQuery(item),
-    summary: calculatePricing(comparables, { query: buildValuationQuery(item), condition: item.condition }), comparables
+    id: uid('valuation'),
+    itemId: item.id,
+    capturedAt: nowIso(),
+    query,
+    summary: calculatePricing(comparables, { query, condition: item.condition }),
+    comparables
   };
 }
 
@@ -90,9 +99,20 @@ export function recommendShipping(item: ItemRecord): ShippingRecommendation {
 }
 
 export function generateListingDescription(item: ItemRecord): string {
-  const details = [item.brand && `Brand: ${item.brand}`, item.model && `Model: ${item.model}`, item.year && `Year: ${item.year}`, item.edition && `Edition: ${item.edition}`, `Condition: ${item.condition}`, item.conditionNotes && `Condition notes: ${item.conditionNotes}`, item.serialNumber && `Serial: ${item.serialNumber}`].filter(Boolean);
-  const notes = [clean(item.description), clean(item.notes)].filter(Boolean).join('\n\n');
-  return [`${item.title}`, '', ...details, notes && '', notes, '', 'Stored and cataloged in Vault Collector Pro. Review all photos and item specifics before purchase.'].filter(value => value !== false && value !== '').join('\n');
+  const details = [
+    item.brand ? `Brand: ${item.brand}` : '',
+    item.model ? `Model: ${item.model}` : '',
+    item.year != null ? `Year: ${item.year}` : '',
+    item.edition ? `Edition: ${item.edition}` : '',
+    `Condition: ${item.condition}`,
+    item.conditionNotes ? `Condition notes: ${item.conditionNotes}` : '',
+    item.serialNumber ? `Serial: ${item.serialNumber}` : ''
+  ].filter((value): value is string => value.length > 0);
+  const notes = [clean(item.description), clean(item.notes)].filter(value => value.length > 0).join('\n\n');
+  const lines = [item.title, '', ...details];
+  if (notes) lines.push('', notes);
+  lines.push('', 'Stored and cataloged in Vault Collector Pro. Review all photos and item specifics before purchase.');
+  return lines.join('\n');
 }
 
 export function createListingDraft(item: ItemRecord, marketplace: ListingDraft['marketplace'] = 'ebay'): ListingDraft {
