@@ -243,3 +243,24 @@ fn background_indexer_drains_the_durable_queue_without_a_search_command() {
     }
     assert!(indexed, "background worker did not drain the reindex queue");
 }
+
+#[test]
+fn exports_versioned_mobile_snapshot_and_rejects_tampered_changes_atomically() {
+    let mut connection = open_database(std::path::Path::new(":memory:")).unwrap();
+    ItemRepository::create(&mut connection, draft()).unwrap();
+    let snapshot = IntelligenceRepository::export_intelligence_snapshot(&connection).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&snapshot).unwrap();
+    assert_eq!(parsed["format"], "vault-intelligence-snapshot");
+    assert_eq!(parsed["version"], 1);
+    assert_eq!(parsed["payload"]["items"].as_array().unwrap().len(), 1);
+    assert_eq!(parsed["checksum"].as_str().unwrap().len(), 64);
+
+    let vault_id = parsed["vaultId"].as_str().unwrap();
+    let tampered = serde_json::json!({
+        "format":"vault-mobile-changes","version":1,"vaultId":vault_id,"baseRevision":1,
+        "createdAt":"2026-07-14T00:00:00Z","changes":[],"checksum":"invalid"
+    }).to_string();
+    assert!(IntelligenceRepository::import_mobile_changes(&mut connection, &tampered).unwrap_err().to_string().contains("checksum"));
+    let revision: i64 = connection.query_row("SELECT intelligence_revision FROM vault_identity WHERE singleton=1", [], |row| row.get(0)).unwrap();
+    assert_eq!(revision, 1);
+}

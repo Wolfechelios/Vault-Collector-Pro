@@ -58,6 +58,7 @@ export type SavedSearchRecord = {
 export type SearchHistoryRecord = {
   id: string; queryText: string; parsedQueryJson: string; resultCount: number; searchedAt: string;
 };
+export type MobileImportResult = { applied: number; duplicates: number; conflicts: number; revision: number };
 
 const evidenceForRust = (row: ScanEvidence) => ({
   id: row.id,
@@ -147,4 +148,6 @@ export const catalogueApi = {
   ),
   savedSearches: () => invoke<SavedSearchRecord[]>('list_saved_searches'),
   searchHistory: (limit = 20) => invoke<SearchHistoryRecord[]>('list_search_history', { limit })
+  ,exportIntelligenceBundle: () => invoke<string>('export_intelligence_bundle')
+  ,importMobileChangeBundle: (bundleJson: string) => invoke<MobileImportResult>('import_mobile_change_bundle', { bundleJson })
 };

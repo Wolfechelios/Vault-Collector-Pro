@@ -2,7 +2,7 @@ use db::{
     intelligence::{
         CorrectionRuleRecord, EvidenceRecord, FieldStateRecord, IntelligenceRepository,
         IntelligentSearchRequest, NewEvidence, NewSuggestion, SavedSearchRecord,
-        SearchHistoryRecord, SearchRepository, SuggestionDecision, SuggestionRecord,
+        SearchHistoryRecord, SearchRepository, SuggestionDecision, SuggestionRecord, MobileImportResult,
     },
     items::ItemRepository,
     models::{ItemDraft, ItemRecord, SearchRequest},
@@ -179,6 +179,21 @@ fn list_search_history(state: State<'_, AppState>, limit: i64) -> Result<Vec<Sea
     SearchRepository::list_search_history(&connection, limit).map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn export_intelligence_bundle(state: State<'_, AppState>) -> Result<String, String> {
+    let connection = state.connection.lock().map_err(|_| "database lock poisoned".to_string())?;
+    IntelligenceRepository::export_intelligence_snapshot(&connection).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn import_mobile_change_bundle(state: State<'_, AppState>, bundle_json: String) -> Result<MobileImportResult, String> {
+    let mut connection = state.connection.lock().map_err(|_| "database lock poisoned".to_string())?;
+    let result = IntelligenceRepository::import_mobile_changes(&mut connection, &bundle_json).map_err(|error| error.to_string())?;
+    IntelligenceRepository::apply_storage_rules(&mut connection).map_err(|error| error.to_string())?;
+    state.indexer.notify();
+    Ok(result)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
@@ -195,7 +210,7 @@ pub fn run() {
             record_intelligence_analysis, list_review_queue, list_item_evidence, get_item_field_state,
             decide_field_suggestion, list_learning_rules, upsert_learning_rule, delete_learning_rule,
             intelligent_search, save_intelligent_search, record_search_history,
-            list_saved_searches, list_search_history
+            list_saved_searches, list_search_history, export_intelligence_bundle, import_mobile_change_bundle
         ])
         .run(tauri::generate_context!())
         .expect("error while running Vault Catalogue");
