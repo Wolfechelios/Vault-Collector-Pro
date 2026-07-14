@@ -10,7 +10,7 @@ export function E2eProbe() {
   async function run() {
     try {
       const stamp = Date.now();
-      const title = `E2E DeWalt Drill ${stamp}`;
+      const title = `Native Fixture ${stamp}`;
       const created = await catalogueApi.create({
         title,
         brand: 'DeWalt',
