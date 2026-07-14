@@ -12,10 +12,11 @@ use std::sync::Mutex;
 use tauri::{Manager, State};
 use uuid::Uuid;
 
+pub mod background;
 pub mod db;
 pub mod vision;
 
-struct AppState { connection: Mutex<rusqlite::Connection> }
+struct AppState { connection: Mutex<rusqlite::Connection>, indexer: background::BackgroundIndexer }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,12 +28,18 @@ fn app_health() -> AppHealth { AppHealth { app:"vault-catalogue", version:env!("
 #[tauri::command]
 fn create_item(state: State<'_,AppState>, draft: ItemDraft) -> Result<ItemRecord,String> {
     let mut connection=state.connection.lock().map_err(|_|"database lock poisoned".to_string())?;
-    ItemRepository::create(&mut connection,draft).map_err(|e|e.to_string())
+    let item = ItemRepository::create(&mut connection,draft).map_err(|e|e.to_string())?;
+    IntelligenceRepository::apply_storage_rules(&mut connection).map_err(|e|e.to_string())?;
+    state.indexer.notify();
+    ItemRepository::get(&connection, &item.id).map_err(|e|e.to_string())?.ok_or_else(|| "created item disappeared".into())
 }
 #[tauri::command]
 fn update_item(state: State<'_,AppState>, id:String, draft:ItemDraft) -> Result<ItemRecord,String> {
     let mut connection=state.connection.lock().map_err(|_|"database lock poisoned".to_string())?;
-    ItemRepository::update(&mut connection,&id,draft).map_err(|e|e.to_string())
+    let item = ItemRepository::update(&mut connection,&id,draft).map_err(|e|e.to_string())?;
+    IntelligenceRepository::apply_storage_rules(&mut connection).map_err(|e|e.to_string())?;
+    state.indexer.notify();
+    ItemRepository::get(&connection, &item.id).map_err(|e|e.to_string())?.ok_or_else(|| "updated item disappeared".into())
 }
 #[tauri::command]
 fn get_item(state: State<'_,AppState>, id:String) -> Result<Option<ItemRecord>,String> {
@@ -47,7 +54,9 @@ fn search_items(state: State<'_,AppState>, request:SearchRequest) -> Result<Vec<
 #[tauri::command]
 fn archive_item(state: State<'_,AppState>, id:String) -> Result<(),String> {
     let connection=state.connection.lock().map_err(|_|"database lock poisoned".to_string())?;
-    ItemRepository::archive(&connection,&id).map_err(|e|e.to_string())
+    ItemRepository::archive(&connection,&id).map_err(|e|e.to_string())?;
+    state.indexer.notify();
+    Ok(())
 }
 
 #[tauri::command]
@@ -71,7 +80,7 @@ fn record_intelligence_analysis(
             SuggestionDecision { action: "automatic".into(), value: None },
         ).map_err(|error| error.to_string())?;
     }
-    SearchRepository::process_reindex_queue(&mut connection, 500).map_err(|error| error.to_string())?;
+    state.indexer.notify();
     Ok(())
 }
 
@@ -97,7 +106,8 @@ fn get_item_field_state(state: State<'_, AppState>, item_id: String) -> Result<V
 fn decide_field_suggestion(state: State<'_, AppState>, id: String, decision: SuggestionDecision) -> Result<(), String> {
     let mut connection = state.connection.lock().map_err(|_| "database lock poisoned".to_string())?;
     IntelligenceRepository::decide_suggestion(&mut connection, &id, decision).map_err(|error| error.to_string())?;
-    SearchRepository::process_reindex_queue(&mut connection, 500).map_err(|error| error.to_string())?;
+    IntelligenceRepository::apply_storage_rules(&mut connection).map_err(|error| error.to_string())?;
+    state.indexer.notify();
     Ok(())
 }
 
@@ -109,8 +119,11 @@ fn list_learning_rules(state: State<'_, AppState>) -> Result<Vec<CorrectionRuleR
 
 #[tauri::command]
 fn upsert_learning_rule(state: State<'_, AppState>, rule: CorrectionRuleRecord) -> Result<(), String> {
-    let connection = state.connection.lock().map_err(|_| "database lock poisoned".to_string())?;
-    IntelligenceRepository::upsert_rule(&connection, rule).map_err(|error| error.to_string())
+    let mut connection = state.connection.lock().map_err(|_| "database lock poisoned".to_string())?;
+    IntelligenceRepository::upsert_rule(&connection, rule).map_err(|error| error.to_string())?;
+    IntelligenceRepository::apply_storage_rules(&mut connection).map_err(|error| error.to_string())?;
+    state.indexer.notify();
+    Ok(())
 }
 
 #[tauri::command]
@@ -121,8 +134,7 @@ fn delete_learning_rule(state: State<'_, AppState>, id: String) -> Result<(), St
 
 #[tauri::command]
 fn intelligent_search(state: State<'_, AppState>, request: IntelligentSearchRequest) -> Result<Vec<ItemRecord>, String> {
-    let mut connection = state.connection.lock().map_err(|_| "database lock poisoned".to_string())?;
-    SearchRepository::process_reindex_queue(&mut connection, 500).map_err(|error| error.to_string())?;
+    let connection = state.connection.lock().map_err(|_| "database lock poisoned".to_string())?;
     let ids = SearchRepository::search_ids(&connection, request).map_err(|error| error.to_string())?;
     ids.into_iter().map(|id| {
         ItemRepository::get(&connection, &id)
@@ -171,8 +183,11 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             let data_dir=app.path().app_data_dir()?;
-            let connection=db::open_database(&data_dir.join("vault-catalogue.sqlite3")).map_err(|e|Box::<dyn std::error::Error>::from(e))?;
-            app.manage(AppState{connection:Mutex::new(connection)});
+            let database_path=data_dir.join("vault-catalogue.sqlite3");
+            let mut connection=db::open_database(&database_path).map_err(|e|Box::<dyn std::error::Error>::from(e))?;
+            IntelligenceRepository::apply_storage_rules(&mut connection).map_err(|e|Box::<dyn std::error::Error>::from(e))?;
+            let indexer=background::BackgroundIndexer::start(database_path);
+            app.manage(AppState{connection:Mutex::new(connection),indexer});
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

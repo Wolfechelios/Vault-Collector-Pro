@@ -301,8 +301,7 @@ impl IntelligenceRepository {
     }
 
     pub fn upsert_rule(connection: &Connection, rule: CorrectionRuleRecord) -> Result<(), DatabaseError> {
-        serde_json::from_str::<serde_json::Value>(&rule.conditions_json).map_err(|error| DatabaseError::Validation(error.to_string()))?;
-        serde_json::from_str::<serde_json::Value>(&rule.action_json).map_err(|error| DatabaseError::Validation(error.to_string()))?;
+        validate_rule(&rule)?;
         connection.execute(
             "INSERT INTO correction_rules(id,rule_kind,conditions_json,action_json,priority,evidence_count,enabled,explanation,created_at,updated_at)
              VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)
@@ -310,6 +309,65 @@ impl IntelligenceRepository {
             params![rule.id,rule.rule_kind,rule.conditions_json,rule.action_json,rule.priority,rule.evidence_count,if rule.enabled {1} else {0},rule.explanation,rule.created_at,rule.updated_at],
         )?;
         Ok(())
+    }
+
+    pub fn apply_storage_rules(connection: &mut Connection) -> Result<usize, DatabaseError> {
+        let rules = Self::list_rules(connection)?.into_iter()
+            .filter(|rule| rule.enabled && rule.rule_kind == "storage")
+            .filter_map(|rule| {
+                let conditions = serde_json::from_str::<serde_json::Value>(&rule.conditions_json).ok()?;
+                let action = serde_json::from_str::<serde_json::Value>(&rule.action_json).ok()?;
+                Some((rule, conditions.get("category")?.as_str()?.to_string(), action.get("value")?.as_str()?.to_string()))
+            })
+            .collect::<Vec<_>>();
+        let items = {
+            let mut statement = connection.prepare("SELECT id,category FROM items WHERE status<>'archived' ORDER BY id")?;
+            let rows = statement.query_map([], |row| Ok((row.get::<_,String>(0)?, row.get::<_,String>(1)?)))?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+        let mut applied = 0;
+        for (item_id, category) in items {
+            let Some((rule, _, location)) = rules.iter()
+                .filter(|(_, rule_category, _)| rule_category.trim().eq_ignore_ascii_case(category.trim()))
+                .next() else { continue; };
+            let current: String = connection.query_row(
+                "SELECT coalesce((SELECT value FROM item_specifics WHERE item_id=?1 AND key='storagePath'),'')",
+                [&item_id], |row| row.get(0),
+            )?;
+            if current.trim().eq_ignore_ascii_case(location.trim()) { continue; }
+            let protected = connection.query_row(
+                "SELECT protected FROM item_field_state WHERE item_id=?1 AND field_name='storagePath'",
+                [&item_id], |row| row.get::<_,i64>(0),
+            ).optional()?.unwrap_or(0) != 0;
+            let suffix = rule_slug(location);
+            let evidence_id = format!("evidence:storage:{}:{}:{}", item_id, rule.id, suffix);
+            let suggestion_id = format!("suggestion:storage:{}:{}:{}", item_id, rule.id, suffix);
+            let already_exists = connection.query_row(
+                "SELECT count(*) FROM field_suggestions WHERE id=?1", [&suggestion_id], |row| row.get::<_,i64>(0),
+            )? > 0;
+            if already_exists { continue; }
+            let now = Utc::now().to_rfc3339();
+            Self::record_evidence(connection, NewEvidence {
+                id: evidence_id.clone(), scan_id: format!("learning:storage:{}", rule.id), item_id: Some(item_id.clone()),
+                field_name: "storagePath".into(), value: location.clone(), normalized_value: location.trim().to_uppercase(),
+                confidence: 0.78, source_kind: "learned-rule".into(), source_media_id: None,
+                raw_text: Some(rule.explanation.clone()), bounds_json: None, provider: Some(rule.id.clone()), created_at: now.clone(),
+            })?;
+            let conflict = !current.trim().is_empty() || protected;
+            Self::save_suggestion(connection, NewSuggestion {
+                id: suggestion_id.clone(), item_id: item_id.clone(), field_name: "storagePath".into(), proposed_value: location.clone(),
+                confidence: 0.78, disposition: if conflict { "review".into() } else { "flagged".into() },
+                evidence_ids: vec![evidence_id], conflicting_evidence_ids: vec![], influenced_rule_ids: vec![rule.id.clone()],
+                verification_state: if conflict { "unverified".into() } else { "flagged".into() },
+                status: if conflict { "pending".into() } else { "applied".into() },
+                protected_value: if current.trim().is_empty() { None } else { Some(current.clone()) }, created_at: now,
+            })?;
+            if !conflict {
+                Self::decide_suggestion(connection, &suggestion_id, SuggestionDecision { action: "automatic".into(), value: None })?;
+                applied += 1;
+            }
+        }
+        Ok(applied)
     }
 
     pub fn list_rules(connection: &Connection) -> Result<Vec<CorrectionRuleRecord>, DatabaseError> {
@@ -511,6 +569,31 @@ fn row_to_suggestion(row: &rusqlite::Row<'_>) -> rusqlite::Result<SuggestionReco
     })
 }
 
+fn validate_rule(rule: &CorrectionRuleRecord) -> Result<(), DatabaseError> {
+    const KINDS: [&str; 5] = ["alias", "category", "storage", "provider-route", "title-format"];
+    if !KINDS.contains(&rule.rule_kind.as_str()) {
+        return Err(DatabaseError::Validation(format!("invalid rule kind {}", rule.rule_kind)));
+    }
+    let conditions = serde_json::from_str::<serde_json::Value>(&rule.conditions_json)
+        .map_err(|error| DatabaseError::Validation(error.to_string()))?;
+    let action = serde_json::from_str::<serde_json::Value>(&rule.action_json)
+        .map_err(|error| DatabaseError::Validation(error.to_string()))?;
+    let field = conditions.get("field").and_then(|value| value.as_str()).unwrap_or_default().trim();
+    let proposed = action.get("value").and_then(|value| value.as_str()).unwrap_or_default().trim();
+    if field.is_empty() || proposed.is_empty() {
+        return Err(DatabaseError::Validation("rule field and suggested value are required".into()));
+    }
+    if rule.rule_kind == "storage" {
+        let category = conditions.get("category").and_then(|value| value.as_str()).unwrap_or_default().trim();
+        if field != "storagePath" || category.is_empty() {
+            return Err(DatabaseError::Validation("storage rules must target storagePath and include a category".into()));
+        }
+    } else if conditions.get("value").and_then(|value| value.as_str()).unwrap_or_default().trim().is_empty() {
+        return Err(DatabaseError::Validation("non-storage rules require a condition value".into()));
+    }
+    Ok(())
+}
+
 fn record_learning_event(transaction: &Transaction<'_>, item_id: &str, suggestion_id: &str, field: &str, decision: &str, proposed: &str, final_value: Option<&str>, created_at: &str) -> Result<(), DatabaseError> {
     transaction.execute(
         "INSERT INTO learning_events(id,item_id,suggestion_id,field_name,decision,proposed_value,final_value,category,created_at)
@@ -518,9 +601,10 @@ fn record_learning_event(transaction: &Transaction<'_>, item_id: &str, suggestio
         params![Uuid::new_v4().to_string(),item_id,suggestion_id,field,decision,proposed,final_value,created_at],
     )?;
     if let Some(final_value) = final_value {
+        let category: Option<String> = transaction.query_row("SELECT category FROM items WHERE id=?1", [item_id], |row| row.get(0)).optional()?;
         let count: i64 = transaction.query_row(
-            "SELECT count(*) FROM learning_events WHERE field_name=?1 AND upper(trim(proposed_value))=upper(trim(?2)) AND upper(trim(final_value))=upper(trim(?3)) AND decision IN ('accepted','edited')",
-            params![field, proposed, final_value],
+            "SELECT count(*) FROM learning_events WHERE field_name=?1 AND upper(trim(proposed_value))=upper(trim(?2)) AND upper(trim(final_value))=upper(trim(?3)) AND coalesce(category,'')=coalesce(?4,'') AND decision IN ('accepted','edited')",
+            params![field, proposed, final_value, category.as_deref()],
             |row| row.get(0),
         )?;
         if count >= 2 && (field == "category" || !proposed.trim().eq_ignore_ascii_case(final_value.trim())) {
@@ -528,9 +612,13 @@ fn record_learning_event(transaction: &Transaction<'_>, item_id: &str, suggestio
                 "category" => "category", "storagePath" => "storage", "pricingProvider" => "provider-route",
                 "titleFormat" => "title-format", _ => "alias",
             };
-            let conditions = serde_json::json!({"field": field, "value": proposed}).to_string();
+            let conditions = if kind == "storage" {
+                serde_json::json!({"field": field, "category": category.clone().unwrap_or_default()}).to_string()
+            } else {
+                serde_json::json!({"field": field, "value": proposed, "category": category}).to_string()
+            };
             let action = serde_json::json!({"value": final_value}).to_string();
-            let id = format!("rule:{kind}:{}:{}:{}", rule_slug(field), rule_slug(proposed), rule_slug(final_value));
+            let id = format!("rule:{kind}:{}:{}:{}:{}", rule_slug(field), rule_slug(category.as_deref().unwrap_or_default()), rule_slug(proposed), rule_slug(final_value));
             let explanation = format!("Replace or route “{proposed}” with “{final_value}” after {count} accepted corrections.");
             transaction.execute(
                 "INSERT INTO correction_rules(id,rule_kind,conditions_json,action_json,priority,evidence_count,enabled,explanation,created_at,updated_at)

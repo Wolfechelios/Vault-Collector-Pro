@@ -3,6 +3,7 @@ import {
   applyLearningRules,
   createLearningEvent,
   deriveCorrectionRules,
+  recommendStorage,
   updateRule
 } from './index';
 
@@ -95,5 +96,26 @@ describe('local learning engine', () => {
     expect(disabled).toMatchObject({ enabled: false, action: { value: 'DEWALT' } });
     expect(applyLearningRules({ field: 'brand', value: 'DEW ALT' }, [disabled]))
       .toEqual({ value: 'DEW ALT', influencedByRuleIds: [] });
+  });
+
+  it('recommends storage only for an empty field and attributes the matching rule', () => {
+    const rule = deriveCorrectionRules([
+      createLearningEvent({ itemId: '1', suggestionId: '1', field: 'storagePath', decision: 'edited', proposedValue: 'Unassigned', finalValue: 'Garage / Shelf B', category: 'tools' }),
+      createLearningEvent({ itemId: '2', suggestionId: '2', field: 'storagePath', decision: 'edited', proposedValue: 'Unassigned', finalValue: 'Garage / Shelf B', category: 'tools' })
+    ], 2)[0];
+
+    expect(rule.conditions).toEqual({ field: 'storagePath', category: 'tools' });
+    expect(recommendStorage({ category: 'tools', currentValue: '', protected: false }, [rule]))
+      .toEqual({ value: 'Garage / Shelf B', influencedByRuleIds: [rule.id], disposition: 'flagged' });
+  });
+
+  it('never replaces an existing or protected storage assignment', () => {
+    const rule = deriveCorrectionRules([
+      createLearningEvent({ itemId: '1', suggestionId: '1', field: 'storagePath', decision: 'edited', proposedValue: 'Unassigned', finalValue: 'Garage / Shelf B', category: 'tools' }),
+      createLearningEvent({ itemId: '2', suggestionId: '2', field: 'storagePath', decision: 'edited', proposedValue: 'Unassigned', finalValue: 'Garage / Shelf B', category: 'tools' })
+    ], 2)[0];
+
+    expect(recommendStorage({ category: 'tools', currentValue: 'Garage / Shelf A', protected: false }, [rule])).toBeNull();
+    expect(recommendStorage({ category: 'tools', currentValue: '', protected: true }, [rule])).toBeNull();
   });
 });
