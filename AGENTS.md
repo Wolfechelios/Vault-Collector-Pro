@@ -204,6 +204,15 @@ Be merge-ready.
 
 Never merge broken code.
 
+## Verification Efficiency
+
+- During installation and feature development, run only checks directly affected by the change.
+- Do not repeat checks that already passed for the same unchanged code.
+- Batch related corrections before triggering remote CI.
+- Record plausible non-blocking risks for later review instead of repeatedly rebuilding every platform.
+- Run the complete release matrix only for a final merge candidate or when the user explicitly requests it.
+- Platform checks that require unavailable hardware, signing credentials, or host operating systems must be handed off with exact test instructions.
+
 ---
 
 ## Priority Order
