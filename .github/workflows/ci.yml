@@ -37,7 +37,27 @@ jobs:
       - name: Test pricing
         run: npm run test --workspace @vault/pricing
       - name: Build desktop and mobile applications
-        run: npm run build
+        id: production_build
+        shell: bash
+        run: |
+          set +e
+          npm run build > build-output.txt 2>&1
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Upload production build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-build-output
+          path: build-output.txt
+          if-no-files-found: error
+          retention-days: 3
+      - name: Enforce production build result
+        if: steps.production_build.outputs.exit_code != '0'
+        run: |
+          cat build-output.txt
+          exit 1
 
   rust:
     runs-on: macos-14
