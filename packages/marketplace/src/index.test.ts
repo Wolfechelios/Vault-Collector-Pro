@@ -3,7 +3,7 @@ import type { ItemRecord } from '@vault/domain';
 import { createListingDraft, exportListingsCsv, recommendShipping, trendPercent, valueItem } from './index';
 
 const item: ItemRecord = {
-  id: 'item-1', title: 'DeWalt 20V Max XR Impact Driver', category: 'tools', subcategory: 'power tools', status: 'private', condition: 'Used', conditionNotes: 'Light wear', description: 'Tested and working.', quantity: 1, sku: 'DW-1', serialNumber: null, brand: 'DeWalt', model: 'DCF887', year: null, edition: null, purchasePrice: null, medianValue: { amountMinor: 9500, currency: 'USD' }, suggestedPrice: { amountMinor: 10900, currency: 'USD' }, minimumPrice: null, notes: null, specifics: { photos: JSON.stringify(['data:image/jpeg;base64,one']) }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z'
+  id: 'item-1', title: 'DeWalt 20V Max XR Impact Driver', category: 'tools', subcategory: 'power tools', status: 'private', condition: 'Used', conditionNotes: 'Light wear', description: 'Tested and working.', quantity: 1, sku: 'DW-1', serialNumber: null, brand: 'DeWalt', model: 'DCF887', year: null, edition: null, purchasePrice: null, medianValue: { amountMinor: 9500, currency: 'USD' }, suggestedPrice: { amountMinor: 10900, currency: 'USD' }, minimumPrice: null, notes: null, specifics: { photos: JSON.stringify(['data:image/jpeg;base64,one']) }, media: [], evidence: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z'
 };
 
 describe('marketplace intelligence', () => {
