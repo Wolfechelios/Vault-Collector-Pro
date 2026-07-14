@@ -170,9 +170,7 @@ CREATE TABLE IF NOT EXISTS search_reindex_queue (
 CREATE TABLE IF NOT EXISTS saved_searches (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  query_text TEXT NOT NULL,
-  parsed_query_json TEXT NOT NULL,
-  is_smart_collection INTEGER NOT NULL DEFAULT 0 CHECK(is_smart_collection IN (0,1)),
+  query_json TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

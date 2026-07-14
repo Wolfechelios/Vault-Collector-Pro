@@ -444,12 +444,17 @@ impl SearchRepository {
     }
 
     pub fn save_search(connection: &Connection, id: &str, name: &str, query_text: &str, parsed_json: &str, smart: bool) -> Result<(), DatabaseError> {
-        serde_json::from_str::<serde_json::Value>(parsed_json).map_err(|error| DatabaseError::Validation(error.to_string()))?;
+        let parsed_query = serde_json::from_str::<serde_json::Value>(parsed_json).map_err(|error| DatabaseError::Validation(error.to_string()))?;
+        let query_json = serde_json::json!({
+            "queryText": query_text,
+            "parsedQuery": parsed_query,
+            "isSmartCollection": smart
+        }).to_string();
         let now = Utc::now().to_rfc3339();
         connection.execute(
-            "INSERT INTO saved_searches(id,name,query_text,parsed_query_json,is_smart_collection,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?6)
-             ON CONFLICT(id) DO UPDATE SET name=excluded.name,query_text=excluded.query_text,parsed_query_json=excluded.parsed_query_json,is_smart_collection=excluded.is_smart_collection,updated_at=excluded.updated_at",
-            params![id,name,query_text,parsed_json,if smart {1} else {0},now],
+            "INSERT INTO saved_searches(id,name,query_json,created_at,updated_at) VALUES(?1,?2,?3,?4,?4)
+             ON CONFLICT(id) DO UPDATE SET name=excluded.name,query_json=excluded.query_json,updated_at=excluded.updated_at",
+            params![id,name,query_json,now],
         )?;
         Ok(())
     }
@@ -465,13 +470,23 @@ impl SearchRepository {
 
     pub fn list_saved_searches(connection: &Connection) -> Result<Vec<SavedSearchRecord>, DatabaseError> {
         let mut statement = connection.prepare(
-            "SELECT id,name,query_text,parsed_query_json,is_smart_collection,created_at,updated_at FROM saved_searches ORDER BY is_smart_collection DESC,name COLLATE NOCASE",
+            "SELECT id,name,query_json,created_at,updated_at FROM saved_searches ORDER BY name COLLATE NOCASE",
         )?;
-        let rows = statement.query_map([], |row| Ok(SavedSearchRecord {
-            id: row.get(0)?, name: row.get(1)?, query_text: row.get(2)?, parsed_query_json: row.get(3)?,
-            is_smart_collection: row.get::<_,i64>(4)? != 0, created_at: row.get(5)?, updated_at: row.get(6)?,
-        }))?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(DatabaseError::from)
+        let rows = statement.query_map([], |row| Ok((
+            row.get::<_,String>(0)?, row.get::<_,String>(1)?, row.get::<_,String>(2)?,
+            row.get::<_,String>(3)?, row.get::<_,String>(4)?,
+        )))?;
+        let mut saved = Vec::new();
+        for row in rows {
+            let (id, name, query_json, created_at, updated_at) = row?;
+            let envelope = serde_json::from_str::<serde_json::Value>(&query_json).unwrap_or_default();
+            let query_text = envelope.get("queryText").and_then(|value| value.as_str()).unwrap_or_default().to_string();
+            let parsed_query_json = envelope.get("parsedQuery").map(|value| value.to_string()).unwrap_or_else(|| query_json.clone());
+            let is_smart_collection = envelope.get("isSmartCollection").and_then(|value| value.as_bool()).unwrap_or(false);
+            saved.push(SavedSearchRecord { id, name, query_text, parsed_query_json, is_smart_collection, created_at, updated_at });
+        }
+        saved.sort_by(|left, right| right.is_smart_collection.cmp(&left.is_smart_collection).then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase())));
+        Ok(saved)
     }
 
     pub fn list_search_history(connection: &Connection, limit: i64) -> Result<Vec<SearchHistoryRecord>, DatabaseError> {

@@ -154,6 +154,9 @@ fn persists_rules_and_searches_fts_specifics_offline() {
 
     SearchRepository::save_search(&connection, "saved-1", "Garage drills", "yellow DeWalt drill", "{}", false).unwrap();
     SearchRepository::record_search_history(&connection, "history-1", "yellow DeWalt drill", "{}", 1).unwrap();
+    let saved_rows = SearchRepository::list_saved_searches(&connection).unwrap();
+    assert_eq!(saved_rows[0].query_text, "yellow DeWalt drill");
+    assert_eq!(saved_rows[0].parsed_query_json, "{}");
     let saved: i64 = connection.query_row("SELECT count(*) FROM saved_searches", [], |row| row.get(0)).unwrap();
     let history: i64 = connection.query_row("SELECT count(*) FROM search_history", [], |row| row.get(0)).unwrap();
     assert_eq!((saved, history), (1, 1));
