@@ -4,12 +4,13 @@ import { emptyItemForm, formToDraft, itemToForm, type ItemFormState, validateIte
 import { VisionPanel, type PendingIntelligenceAnalysis } from '../vision/VisionPanel';
 import { ValuationPanel } from '../valuation/ValuationPanel';
 import { CategorySpecificFields } from './CategorySpecificFields';
+import type { CategorySchemaRecord } from '@vault/intelligence-sync';
 
 const categories = ['cards','comics','magazines','books','coins','cash','vhs','vinyl','actionFigures','electronics','memorabilia','posters','furniture','cars','tools','shoes','clothing','jewelry','art','other'];
-type Props = { item: ItemRecord | null; busy: boolean; onCancel: () => void; onSave: (draft: ReturnType<typeof formToDraft>, analysis?: PendingIntelligenceAnalysis) => Promise<void> };
+type Props = { item: ItemRecord | null; schemas: CategorySchemaRecord[]; busy: boolean; onCancel: () => void; onSave: (draft: ReturnType<typeof formToDraft>, analysis?: PendingIntelligenceAnalysis) => Promise<void> };
 const readFile = (file: File) => new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(reader.error); reader.readAsDataURL(file); });
 
-export function ItemEditor({ item, busy, onCancel, onSave }: Props) {
+export function ItemEditor({ item, schemas, busy, onCancel, onSave }: Props) {
   const [form, setForm] = React.useState<ItemFormState>(() => item ? itemToForm(item) : emptyItemForm);
   const [errors, setErrors] = React.useState<string[]>([]);
   const [visionOpen, setVisionOpen] = React.useState(false);
@@ -52,7 +53,7 @@ export function ItemEditor({ item, busy, onCancel, onSave }: Props) {
       <label>Suggested price<input inputMode="decimal" value={form.suggestedPrice} onChange={set('suggestedPrice')}/></label><label>Minimum price<input inputMode="decimal" value={form.minimumPrice} onChange={set('minimumPrice')}/></label>
       <label className="full">Storage path<input value={form.storagePath} onChange={set('storagePath')} placeholder="House / Garage / Shelf A / Bin 3"/></label>
       <label className="full">Tags<input value={form.tags} onChange={set('tags')} placeholder="rare, insured, needs grading"/></label>
-      <CategorySpecificFields category={form.category} values={form.specifics} protectedFields={form.protectedFields} onChange={(key, value) => setForm((current) => ({ ...current, specifics: { ...current.specifics, [key]: value }, protectedFields: [...new Set([...current.protectedFields, key])] }))}/>
+      <CategorySpecificFields category={form.category} definitions={schemas} values={form.specifics} protectedFields={form.protectedFields} onChange={(key, value) => setForm((current) => ({ ...current, specifics: { ...current.specifics, [key]: value }, protectedFields: [...new Set([...current.protectedFields, key])] }))}/>
       <label className="full">Description<textarea rows={5} value={form.description} onChange={set('description')}/></label><label className="full">Private notes<textarea rows={3} value={form.notes} onChange={set('notes')}/></label>
     </div>
     <div className="editor-actions"><button type="button" className="secondary" onClick={onCancel}>Cancel</button><button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save item'}</button></div>

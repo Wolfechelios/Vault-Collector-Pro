@@ -13,6 +13,7 @@ const CAPTURE_SCHEMA: &str = include_str!("../../migrations/0003_capture_intelli
 const VALUATION_MARKETPLACE_SCHEMA: &str = include_str!("../../migrations/0004_valuation_marketplace.sql");
 const INVENTORY_INTELLIGENCE_SCHEMA: &str = include_str!("../../migrations/0005_inventory_intelligence.sql");
 const MOBILE_INTELLIGENCE_SCHEMA: &str = include_str!("../../migrations/0006_mobile_intelligence.sql");
+const CATEGORY_SCHEMA_MANAGEMENT: &str = include_str!("../../migrations/0007_category_schema_management.sql");
 
 #[derive(Debug, Error)]
 pub enum DatabaseError {
@@ -41,6 +42,15 @@ pub fn open_database(path: &Path) -> Result<Connection, DatabaseError> {
     connection.execute_batch(VALUATION_MARKETPLACE_SCHEMA)?;
     connection.execute_batch(INVENTORY_INTELLIGENCE_SCHEMA)?;
     connection.execute_batch(MOBILE_INTELLIGENCE_SCHEMA)?;
+    let has_enabled = {
+        let mut statement = connection.prepare("PRAGMA table_info(category_field_definitions)")?;
+        let rows = statement.query_map([], |row| row.get::<_, String>(1))?;
+        rows.collect::<Result<Vec<_>, _>>()?.iter().any(|column| column == "enabled")
+    };
+    if !has_enabled {
+        connection.execute("ALTER TABLE category_field_definitions ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1))", [])?;
+    }
+    connection.execute_batch(CATEGORY_SCHEMA_MANAGEMENT)?;
     Ok(connection)
 }
 

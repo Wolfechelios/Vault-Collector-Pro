@@ -7,6 +7,11 @@ describe('CategorySpecificFields', () => {
   it('renders tool fields from the category schema and marks protected edits', () => {
     const html = renderToStaticMarkup(<CategorySpecificFields
       category="tools"
+      definitions={[
+        { category: 'tools', key: 'voltage', label: 'Voltage', kind: 'text', required: false, searchable: true, options: [], aliases: [], order: 20, enabled: true },
+        { category: 'tools', key: 'powerSource', label: 'Power source', kind: 'select', required: false, searchable: true, options: ['Battery'], aliases: [], order: 30, enabled: true },
+        { category: 'tools', key: 'hidden', label: 'Hidden', kind: 'text', required: false, searchable: true, options: [], aliases: [], order: 10, enabled: false }
+      ]}
       values={{ voltage: '20V' }}
       protectedFields={['voltage']}
       onChange={() => undefined}
@@ -15,5 +20,6 @@ describe('CategorySpecificFields', () => {
     expect(html).toContain('Power source');
     expect(html).toContain('20V');
     expect(html).toContain('Protected manual value');
+    expect(html).not.toContain('Hidden');
   });
 });

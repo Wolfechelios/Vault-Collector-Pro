@@ -2,6 +2,28 @@ import { describe, expect, it } from 'vitest';
 import { createChangeBundle, createSnapshotBundle, planMobileChanges, verifyChangeBundle, verifySnapshotBundle } from './index';
 
 describe('verified intelligence bundles', () => {
+  it('round-trips validated category schemas', async () => {
+    const categorySchemas = [{
+      category: 'tools', key: 'voltage', label: 'Voltage', kind: 'text', required: false,
+      searchable: true, options: [], aliases: ['volts'], order: 10, enabled: true
+    }];
+    const bundle = await createSnapshotBundle('vault-1', 4, { items: [], rules: [], categorySchemas });
+    expect((await verifySnapshotBundle(bundle)).payload.categorySchemas).toEqual(categorySchemas);
+  });
+
+  it('rejects malformed category schemas before import', async () => {
+    const bundle = await createSnapshotBundle('vault-1', 4, {
+      items: [], rules: [], categorySchemas: [{ category: '', key: 'voltage', label: 'Voltage', kind: 'text' }] as never
+    });
+    await expect(verifySnapshotBundle(bundle)).rejects.toThrow('category schema');
+  });
+
+  it('rejects duplicate category schema keys', async () => {
+    const schema = { category: 'tools', key: 'voltage', label: 'Voltage', kind: 'text', required: false, searchable: true, options: [], aliases: [], order: 10, enabled: true };
+    const bundle = await createSnapshotBundle('vault-1', 4, { items: [], rules: [], categorySchemas: [schema, schema] });
+    await expect(verifySnapshotBundle(bundle)).rejects.toThrow('Duplicate category schema');
+  });
+
   it('creates deterministic checksums independent of object key order', async () => {
     const left = await createSnapshotBundle('vault-1', 4, { items: [{ id: '1', title: 'Drill' }], rules: [] }, '2026-07-14T00:00:00Z');
     const right = await createSnapshotBundle('vault-1', 4, { rules: [], items: [{ title: 'Drill', id: '1' }] }, '2026-07-14T00:00:00Z');

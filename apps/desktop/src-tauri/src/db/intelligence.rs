@@ -115,6 +115,21 @@ pub struct CorrectionRuleRecord {
     pub updated_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CategorySchemaRecord {
+    pub category: String,
+    pub key: String,
+    pub label: String,
+    pub kind: String,
+    pub required: bool,
+    pub searchable: bool,
+    pub options: Vec<String>,
+    pub aliases: Vec<String>,
+    pub order: i64,
+    pub enabled: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct IntelligentSearchRequest {
@@ -166,6 +181,44 @@ pub struct SearchHistoryRecord {
 pub struct IntelligenceRepository;
 
 impl IntelligenceRepository {
+    pub fn list_category_schemas(connection: &Connection) -> Result<Vec<CategorySchemaRecord>, DatabaseError> {
+        let mut statement = connection.prepare(
+            "SELECT category,field_key,label,kind,required,searchable,options_json,aliases_json,sort_order,enabled FROM category_field_definitions ORDER BY category,sort_order,field_key"
+        )?;
+        let rows = statement.query_map([], |row| {
+            let options_json: String = row.get(6)?;
+            let aliases_json: String = row.get(7)?;
+            Ok(CategorySchemaRecord {
+                category: row.get(0)?, key: row.get(1)?, label: row.get(2)?, kind: row.get(3)?,
+                required: row.get::<_, i64>(4)? != 0, searchable: row.get::<_, i64>(5)? != 0,
+                options: serde_json::from_str(&options_json).unwrap_or_default(),
+                aliases: serde_json::from_str(&aliases_json).unwrap_or_default(),
+                order: row.get(8)?, enabled: row.get::<_, i64>(9)? != 0,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(DatabaseError::from)
+    }
+
+    pub fn upsert_category_schema(connection: &Connection, schema: CategorySchemaRecord) -> Result<CategorySchemaRecord, DatabaseError> {
+        if schema.category.trim().is_empty() || schema.key.trim().is_empty() || schema.label.trim().is_empty() || schema.kind.trim().is_empty() {
+            return Err(DatabaseError::Validation("category schema category, key, label, and kind are required".into()));
+        }
+        connection.execute(
+            "INSERT INTO category_field_definitions(category,field_key,label,kind,required,searchable,options_json,aliases_json,sort_order,updated_at,enabled)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)
+             ON CONFLICT(category,field_key) DO UPDATE SET label=excluded.label,kind=excluded.kind,required=excluded.required,searchable=excluded.searchable,options_json=excluded.options_json,aliases_json=excluded.aliases_json,sort_order=excluded.sort_order,updated_at=excluded.updated_at,enabled=excluded.enabled",
+            params![schema.category.trim().to_lowercase(),schema.key.trim(),schema.label.trim(),schema.kind.trim(),if schema.required{1}else{0},if schema.searchable{1}else{0},serde_json::to_string(&schema.options)?,serde_json::to_string(&schema.aliases)?,schema.order,Utc::now().to_rfc3339(),if schema.enabled{1}else{0}],
+        )?;
+        Ok(schema)
+    }
+
+    pub fn delete_category_schema(connection: &Connection, category: &str, key: &str) -> Result<(), DatabaseError> {
+        if connection.execute("DELETE FROM category_field_definitions WHERE category=?1 AND field_key=?2", params![category,key])? == 0 {
+            return Err(DatabaseError::NotFound(format!("{category}:{key}")));
+        }
+        Ok(())
+    }
+
     pub fn record_analysis(connection: &mut Connection, evidence: Vec<NewEvidence>, suggestions: Vec<NewSuggestion>) -> Result<(), DatabaseError> {
         let transaction = connection.transaction()?;
         for row in evidence {
@@ -426,11 +479,12 @@ impl IntelligenceRepository {
         }
         let rules = Self::list_rules(connection)?.into_iter().map(serde_json::to_value).collect::<Result<Vec<_>,_>>()?;
         let saved_searches = SearchRepository::list_saved_searches(connection)?.into_iter().map(serde_json::to_value).collect::<Result<Vec<_>,_>>()?;
+        let category_schemas = Self::list_category_schemas(connection)?.into_iter().map(serde_json::to_value).collect::<Result<Vec<_>,_>>()?;
         let exported_at = Utc::now().to_rfc3339();
         let body = serde_json::json!({
             "format":"vault-intelligence-snapshot","version":1,"vaultId":vault_id,
             "revision":revision,"exportedAt":exported_at,
-            "payload":{"items":items,"evidence":evidence,"suggestions":suggestions,"fieldState":field_state,"rules":rules,"savedSearches":saved_searches}
+            "payload":{"items":items,"evidence":evidence,"suggestions":suggestions,"fieldState":field_state,"rules":rules,"savedSearches":saved_searches,"categorySchemas":category_schemas}
         });
         let checksum = json_checksum(&body)?;
         let mut envelope = body;
