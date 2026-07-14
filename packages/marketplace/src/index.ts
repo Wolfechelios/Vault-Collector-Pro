@@ -50,7 +50,7 @@ export type ShippingRecommendation = {
 const nowIso = () => new Date().toISOString();
 const uid = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
 const parsePhotos = (item: ItemRecord): string[] => {
-  try { const value = JSON.parse(item.specifics.photos ?? '[]'); return Array.isArray(value) ? value.filter(v => typeof v === 'string') : []; }
+  try { const value = JSON.parse(item.specifics.photos ?? '[]'); return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []; }
   catch { return []; }
 };
 const clean = (value?: string | null) => value?.trim() ?? '';
@@ -62,9 +62,12 @@ export function buildValuationQuery(item: ItemRecord): string {
 
 export async function collectComparables(providers: ComparableProvider[], item: ItemRecord, signal?: AbortSignal): Promise<ProviderResult[]> {
   const query = buildValuationQuery(item);
-  return Promise.all(providers.map(async provider => {
-    try { return await provider.search(query, { condition: item.condition, signal }); }
-    catch (error) { return { provider: provider.id, health: 'error', comparables: [], message: String(error) }; }
+  return Promise.all(providers.map(async (provider): Promise<ProviderResult> => {
+    try {
+      return await provider.search(query, { condition: item.condition, signal });
+    } catch (error) {
+      return { provider: provider.id, health: 'error', comparables: [], message: String(error) };
+    }
   }));
 }
 
@@ -120,9 +123,9 @@ export function trendPercent(history: ValuationSnapshot[]): number | null {
 }
 
 export class ManualComparableProvider implements ComparableProvider {
-  id: ProviderId = 'manual';
+  readonly id: ProviderId = 'manual';
   constructor(private readonly rows: SaleComparable[]) {}
   async search(query: string): Promise<ProviderResult> {
-    return { provider: this.id, health: 'ready', comparables: this.rows.map(row => ({ ...row, provider: row.provider || 'manual', matchScore: row.matchScore })) , message: `Loaded ${this.rows.length} manually entered comparables for ${query}.` };
+    return { provider: this.id, health: 'ready', comparables: this.rows.map(row => ({ ...row, provider: row.provider || 'manual', matchScore: row.matchScore })), message: `Loaded ${this.rows.length} manually entered comparables for ${query}.` };
   }
 }
