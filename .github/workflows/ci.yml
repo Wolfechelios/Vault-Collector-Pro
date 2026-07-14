@@ -36,6 +36,11 @@ jobs:
         run: npm run test --workspace @vault/vision
       - name: Test pricing
         run: npm run test --workspace @vault/pricing
+      - name: Test integrated inventory intelligence
+        run: |
+          npm run test --workspace @vault/inventory-intelligence
+          npm run test --workspace @vault/learning
+          npm run test --workspace @vault/search
       - name: Build desktop and mobile applications
         id: production_build
         shell: bash
