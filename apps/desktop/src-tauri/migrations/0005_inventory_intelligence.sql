@@ -223,8 +223,7 @@ CREATE TRIGGER IF NOT EXISTS intelligence_evidence_ai AFTER INSERT ON scan_evide
   ON CONFLICT(item_id) DO UPDATE SET reason=excluded.reason, requested_at=excluded.requested_at;
 END;
 
-INSERT INTO search_reindex_queue(item_id, reason, requested_at)
-SELECT id, 'migration-backfill', updated_at FROM items
-ON CONFLICT(item_id) DO NOTHING;
+INSERT OR IGNORE INTO search_reindex_queue(item_id, reason, requested_at)
+SELECT id, 'migration-backfill', updated_at FROM items;
 
 COMMIT;
