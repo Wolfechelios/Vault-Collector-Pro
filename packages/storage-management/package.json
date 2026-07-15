@@ -1,0 +1,1 @@
+{"name":"@vault/storage-management","version":"0.7.0","private":true,"type":"module","main":"src/index.ts","types":"src/index.ts","scripts":{"test":"vitest run"},"devDependencies":{"vitest":"^2.1.0"}}

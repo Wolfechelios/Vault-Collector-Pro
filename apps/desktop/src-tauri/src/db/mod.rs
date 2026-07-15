@@ -14,6 +14,7 @@ const VALUATION_MARKETPLACE_SCHEMA: &str = include_str!("../../migrations/0004_v
 const INVENTORY_INTELLIGENCE_SCHEMA: &str = include_str!("../../migrations/0005_inventory_intelligence.sql");
 const MOBILE_INTELLIGENCE_SCHEMA: &str = include_str!("../../migrations/0006_mobile_intelligence.sql");
 const CATEGORY_SCHEMA_MANAGEMENT: &str = include_str!("../../migrations/0007_category_schema_management.sql");
+const STORAGE_PRICING_SCHEMA: &str = include_str!("../../migrations/0008_storage_pricing_adapters.sql");
 
 #[derive(Debug, Error)]
 pub enum DatabaseError {
@@ -51,6 +52,7 @@ pub fn open_database(path: &Path) -> Result<Connection, DatabaseError> {
         connection.execute("ALTER TABLE category_field_definitions ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1))", [])?;
     }
     connection.execute_batch(CATEGORY_SCHEMA_MANAGEMENT)?;
+    connection.execute_batch(STORAGE_PRICING_SCHEMA)?;
     Ok(connection)
 }
 
@@ -103,6 +105,13 @@ mod tests {
             |row| row.get(0),
         ).expect("fts query should work");
         assert_eq!(count, 1);
+    }
+    #[test]
+    fn migration_creates_storage_and_pricing_tables() {
+        let connection = open_database(Path::new(":memory:")).expect("database should initialize");
+        for table in ["storage_nodes", "storage_node_closure", "storage_assignments", "storage_moves", "storage_labels", "pricing_provider_accounts", "pricing_provider_cache", "pricing_provider_requests", "pricing_refresh_jobs"] {
+            assert_eq!(table_exists(&connection, table), 1, "missing table {table}");
+        }
     }
     #[test]
     fn intelligence_migration_is_idempotent() {

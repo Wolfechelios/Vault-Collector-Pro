@@ -36,6 +36,10 @@ jobs:
         run: npm run test --workspace @vault/vision
       - name: Test pricing
         run: npm run test --workspace @vault/pricing
+      - name: Test pricing adapters
+        run: npm run test --workspace @vault/pricing-adapters
+      - name: Test storage management
+        run: npm run test --workspace @vault/storage-management
       - name: Test integrated inventory intelligence
         run: |
           npm run test --workspace @vault/inventory-intelligence
