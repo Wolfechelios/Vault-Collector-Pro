@@ -17,7 +17,7 @@ export class RecognitionWorkerClient {
 
   recognizePhotos(images: string[]) {
     return new Promise<WebRecognitionResult>((resolve, reject) => {
-      const id = crypto.randomUUID();
+      const id = globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       this.pending.set(id, {resolve, reject});
       this.worker.postMessage({id, type: 'recognize', images} satisfies RecognitionRequest);
     });

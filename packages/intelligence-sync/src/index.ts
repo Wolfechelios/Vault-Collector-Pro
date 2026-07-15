@@ -45,8 +45,13 @@ function canonical(value: unknown): string {
 
 async function checksum(value: unknown): Promise<string> {
   const bytes = new TextEncoder().encode(canonical(value));
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
-  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  if (globalThis.crypto?.subtle?.digest) {
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+    return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  }
+  let h = 2166136261;
+  for (const byte of bytes) { h ^= byte; h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(16).padStart(8, '0');
 }
 
 const withoutChecksum = <T extends { checksum: string }>(bundle: T): Omit<T, 'checksum'> => {
