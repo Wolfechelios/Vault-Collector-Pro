@@ -27,7 +27,9 @@
     "@vault/search": "0.7.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "zod": "^3.24.0"
+    "zod": "^3.24.0",
+    "@vault/pricing-adapters": "0.7.0",
+    "@vault/storage-management": "0.7.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",
