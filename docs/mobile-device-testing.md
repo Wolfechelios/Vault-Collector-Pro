@@ -1,39 +1,43 @@
-# WolfeVault Mobile Device Testing
+# WolfeVault Mobile PWA Testing
 
-## Android
+## Install from GitHub Pages
 
-1. From the repository root run `npm run mobile:android --workspace @vault/mobile`.
-2. Let Android Studio finish its first Gradle sync.
-3. Select a physical Android 7.0+ device with USB debugging enabled.
-4. Choose the `app` run configuration and press Run.
-5. A command-line debug build, when the Android SDK is installed, is `cd apps/mobile/android && ./gradlew assembleDebug`.
-6. The resulting APK is `apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk`.
+The production address is `https://wolfechelios.github.io/Vault-Collector-Pro/`.
 
-## iOS
+### iPhone and iPad
 
-1. On macOS run `npm run mobile:ios --workspace @vault/mobile`.
-2. In Xcode select the `App` project and `App` target.
-3. Under Signing & Capabilities select your Apple development team and keep bundle identifier `com.wolfe.vaultcollector` unless your account requires a unique suffix.
-4. Select a physical iPhone or iPad and press Run.
-5. Accept camera and selected-photo permissions when prompted.
+1. Open the production address in Safari.
+2. Tap Share, then **Add to Home Screen**.
+3. Open WolfeVault from its new home-screen icon.
+4. Allow camera or photo-library access when capture requests it.
+
+### Android
+
+1. Open the production address in Chrome.
+2. Open the browser menu and choose **Install app** or **Add to Home screen**.
+3. Open WolfeVault from the launcher.
+4. Allow camera or file access when capture requests it.
+
+## First-load preparation
+
+Stay online for the first complete load. Open Capture and analyze one representative photo so the OCR and object-recognition assets can download and enter the offline cache. Do not switch to airplane mode until WolfeVault reports the analysis result or a specific model warning.
 
 ## Offline acceptance checklist
 
-- Enable airplane mode before first analysis.
-- Capture and select photos using both the camera and photo library.
-- Confirm OCR returns visible label text and model/serial candidates.
-- Confirm UPC/EAN/QR barcode values appear as barcode evidence.
-- Test tools, cards, coins, electronics, and clothing or shoes.
-- Confirm object/category candidates show confidence and can be reviewed.
-- Test a known printed brand and confirm uncertain logo/brand signals remain flagged rather than silently replacing a manual value.
-- Test an unsupported logo and confirm no confident brand is invented.
-- Deny camera permission once and confirm the existing capture is not lost.
-- Capture multiple photos, restart the app, and confirm offline state remains.
-- Import a desktop snapshot and confirm category-specific fields match the desktop schema manager.
-- Edit a field, export the mobile change bundle, and import it on desktop.
+- Import a desktop snapshot and confirm items, learning rules, evidence, and category-specific fields appear.
+- Analyze one representative photo while online to cache recognition assets.
+- Close the installed PWA, enable airplane mode, and reopen it from the home screen.
+- Confirm inventory, deterministic search, smart collections, rules, schemas, and review data remain available.
+- Capture or select photos and confirm cached OCR and object/category recognition run locally.
+- Confirm UPC, EAN, or QR values appear as barcode evidence on supported images.
+- Confirm uncertain logo or brand signals remain flagged instead of replacing a manual value.
+- Disable or deny camera access and confirm file selection, pasted text, manual fields, and offline saving still work.
+- Save a capture, restart the PWA, and confirm the queued change remains available for export.
+- Return online, deploy an update, and confirm WolfeVault asks before reloading into the new version.
 
-## Flagged device risks
+## Known device risks
 
-- Broad commercial logo coverage is limited to locally recognized brand text and classifier signals until a separately licensed or trained logo dataset is supplied.
-- iOS compilation and signing require Xcode and an Apple development team and were not executed in a non-macOS development environment.
-- Camera quality, OCR latency, thermal behavior, and classifier accuracy must be measured on the physical devices you intend to support.
+- Browser OCR and object-model download time varies with the first connection and device storage.
+- Mobile Safari can evict site data under severe storage pressure; export pending changes before clearing Safari website data.
+- Broad commercial logo coverage remains limited to recognized brand text and conservative classifier aliases.
+- Camera quality, OCR latency, memory pressure, and thermal behavior must be measured on the devices you intend to support.

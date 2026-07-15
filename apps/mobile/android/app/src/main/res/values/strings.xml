@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">WolfeVault</string>
-    <string name="title_activity_main">WolfeVault</string>
-    <string name="package_name">com.wolfe.vaultcollector</string>
-    <string name="custom_url_scheme">com.wolfe.vaultcollector</string>
-</resources>

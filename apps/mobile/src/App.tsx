@@ -7,6 +7,8 @@ import { MobileCollections, MobileSearch } from './features/search/MobileSearch'
 import { MobileRules } from './features/rules/MobileRules';
 import './styles.css';
 import type { CategorySchemaRecord } from '@vault/intelligence-sync';
+import {PwaStatus} from './pwa/PwaStatus';
+import './pwa/pwa.css';
 
 type Tab='capture'|'review'|'search'|'collections'|'rules';
 const repository=new MobileIntelligenceRepository();
@@ -18,7 +20,7 @@ export function MobileApp({initialTab='capture'}:{initialTab?:Tab}) { const[tab,
   async function append(kind:any,recordId:string,value:any){const meta=await repository.getSnapshotMeta();if(!meta){setStatus('Import a desktop snapshot first');return;}await repository.appendChange({id:`mobile:${kind}:${recordId}:${Date.now()}`,kind,recordId,value,baseFingerprint:'',createdAt:new Date().toISOString()});setStatus('Change saved offline');}
   async function importBundle(bundle:any){try{await repository.importSnapshot(bundle);await refresh();setStatus(`Imported revision ${bundle.revision} · ${bundle.payload.items.length} items`)}catch(error){setStatus(`Import rejected: ${String(error)}`)}}
   async function exportBundle(){try{const bundle=await repository.exportChanges();download(`vault-mobile-changes-${Date.now()}.json`,JSON.stringify(bundle,null,2));setStatus(`Exported ${bundle.changes.length} change(s)`)}catch(error){setStatus(String(error))}}
-  return <main><header className="top"><p className="eyebrow">WOLFEVAULT MOBILE INTELLIGENCE</p><h1>Your vault, offline</h1><BundleExchange onImport={importBundle} onExport={exportBundle} status={status}/></header><div className="workspace">
+  return <main><header className="top"><p className="eyebrow">WOLFEVAULT MOBILE INTELLIGENCE</p><h1>Your vault, offline</h1><BundleExchange onImport={importBundle} onExport={exportBundle} status={status}/></header><PwaStatus/><div className="workspace">
     {tab==='capture'&&<MobileCapture schemas={schemas} onCapture={value=>void append('capture',`capture-${Date.now()}`,value)}/>}
     {tab==='review'&&<MobileScanReview suggestions={suggestions} evidence={evidence} onDecision={(id,action,value)=>void append('suggestion-decision',id,{action,value})}/>} 
     {tab==='search'&&<MobileSearch items={items} onSave={query=>void append('saved-search',`search-${Date.now()}`,{query})}/>} 

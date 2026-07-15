@@ -79,21 +79,6 @@ jobs:
       - name: Test Tauri Rust backend
         run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 
-  mobile:
-    runs-on: macos-14
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm install --no-audit --no-fund
-      - name: Test mobile intelligence
-        run: npm run test --workspace @vault/mobile
-      - name: Build mobile production application
-        run: npm run build --workspace @vault/mobile
-
   tauri-e2e:
     runs-on: ubuntu-22.04
     timeout-minutes: 40
