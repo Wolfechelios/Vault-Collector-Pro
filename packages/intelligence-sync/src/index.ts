@@ -1,4 +1,16 @@
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+export type CategorySchemaRecord = {
+  category: string;
+  key: string;
+  label: string;
+  kind: string;
+  required: boolean;
+  searchable: boolean;
+  options: string[];
+  aliases: string[];
+  order: number;
+  enabled: boolean;
+};
 export type SnapshotPayload = {
   items: Array<Record<string, JsonValue>>;
   evidence?: Array<Record<string, JsonValue>>;
@@ -6,6 +18,7 @@ export type SnapshotPayload = {
   fieldState?: Array<Record<string, JsonValue>>;
   rules: Array<Record<string, JsonValue>>;
   savedSearches?: Array<Record<string, JsonValue>>;
+  categorySchemas?: CategorySchemaRecord[];
 };
 export type IntelligenceSnapshot = {
   format: 'vault-intelligence-snapshot'; version: 1; vaultId: string; revision: number;
@@ -65,6 +78,21 @@ export async function verifySnapshotBundle(bundle: IntelligenceSnapshot, vaultId
   requireEnvelope(bundle, 'vault-intelligence-snapshot', vaultId);
   if (await checksum(withoutChecksum(bundle)) !== bundle.checksum) throw new Error('Snapshot checksum does not match.');
   if (!Array.isArray(bundle.payload?.items) || !Array.isArray(bundle.payload?.rules)) throw new Error('Snapshot payload is malformed.');
+  const schemas = bundle.payload.categorySchemas ?? [];
+  if (!Array.isArray(schemas)) throw new Error('Snapshot category schemas are malformed.');
+  const schemaKeys = new Set<string>();
+  for (const schema of schemas) {
+    if (!schema || !schema.category?.trim() || !schema.key?.trim() || !schema.label?.trim() || !schema.kind?.trim() ||
+      typeof schema.required !== 'boolean' || typeof schema.searchable !== 'boolean' ||
+      !Array.isArray(schema.options) || !schema.options.every(value => typeof value === 'string') ||
+      !Array.isArray(schema.aliases) || !schema.aliases.every(value => typeof value === 'string') ||
+      !Number.isFinite(schema.order) || typeof schema.enabled !== 'boolean') {
+      throw new Error('Snapshot category schema is malformed.');
+    }
+    const identity = `${schema.category.toLocaleLowerCase()}:${schema.key.toLocaleLowerCase()}`;
+    if (schemaKeys.has(identity)) throw new Error(`Duplicate category schema ${identity}.`);
+    schemaKeys.add(identity);
+  }
   return bundle;
 }
 

@@ -1,0 +1,35 @@
+PRAGMA foreign_keys = ON;
+CREATE INDEX IF NOT EXISTS idx_category_fields_runtime
+  ON category_field_definitions(category, sort_order);
+
+INSERT OR IGNORE INTO category_field_definitions(category,field_key,label,kind,required,searchable,options_json,aliases_json,sort_order,updated_at,enabled) VALUES
+('*','brand','Brand','text',0,1,'[]','[]',10,datetime('now'),1),
+('*','model','Model','identifier',0,1,'[]','["model number","m/n"]',20,datetime('now'),1),
+('*','serialNumber','Serial number','identifier',0,1,'[]','["serial","s/n"]',30,datetime('now'),1),
+('*','year','Year','number',0,1,'[]','[]',40,datetime('now'),1),
+('*','edition','Edition','text',0,1,'[]','[]',50,datetime('now'),1),
+('*','size','Size','text',0,1,'[]','[]',60,datetime('now'),1),
+('*','color','Color','color',0,1,'[]','[]',70,datetime('now'),1),
+('*','material','Material','material',0,1,'[]','[]',80,datetime('now'),1),
+('*','condition','Condition detail','condition',0,1,'[]','[]',90,datetime('now'),1),
+('tools','voltage','Voltage','text',0,1,'[]','[]',110,datetime('now'),1),
+('tools','powerSource','Power source','select',0,1,'["Corded","Battery","Pneumatic","Manual"]','[]',120,datetime('now'),1),
+('tools','toolType','Tool type','text',0,1,'[]','[]',130,datetime('now'),1),
+('cards','cardNumber','Card number','identifier',0,1,'[]','[]',110,datetime('now'),1),
+('cards','set','Set','text',0,1,'[]','[]',120,datetime('now'),1),
+('cards','grade','Grade','text',0,1,'[]','[]',130,datetime('now'),1),
+('cards','gradingCompany','Grading company','select',0,1,'["PSA","BGS","CGC","SGC","Raw"]','[]',140,datetime('now'),1),
+('coins','denomination','Denomination','text',0,1,'[]','[]',110,datetime('now'),1),
+('coins','mintMark','Mint mark','identifier',0,1,'[]','[]',120,datetime('now'),1),
+('coins','grade','Grade','text',0,1,'[]','[]',130,datetime('now'),1),
+('coins','composition','Composition','material',0,1,'[]','[]',140,datetime('now'),1),
+('electronics','storageCapacity','Storage capacity','text',0,1,'[]','[]',110,datetime('now'),1),
+('electronics','processor','Processor','text',0,1,'[]','[]',120,datetime('now'),1),
+('electronics','screenSize','Screen size','text',0,1,'[]','[]',130,datetime('now'),1),
+('clothing','department','Department','select',0,1,'["Men","Women","Unisex","Kids"]','[]',110,datetime('now'),1),
+('clothing','style','Style','text',0,1,'[]','[]',120,datetime('now'),1),
+('shoes','styleCode','Style code','identifier',0,1,'[]','[]',110,datetime('now'),1),
+('shoes','department','Department','select',0,1,'["Men","Women","Unisex","Kids"]','[]',120,datetime('now'),1),
+('jewelry','purity','Purity','text',0,1,'[]','["karat","fineness"]',110,datetime('now'),1),
+('jewelry','weight','Weight','text',0,1,'[]','[]',120,datetime('now'),1),
+('jewelry','stone','Stone','text',0,1,'[]','[]',130,datetime('now'),1);

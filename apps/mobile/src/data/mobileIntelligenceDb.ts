@@ -6,6 +6,7 @@ import {
   type MobileChangeBundle,
   type SnapshotPayload
 } from '@vault/intelligence-sync';
+import type { CategorySchemaRecord } from '@vault/intelligence-sync';
 
 type SnapshotMeta = Pick<IntelligenceSnapshot, 'vaultId' | 'revision' | 'exportedAt' | 'checksum'>;
 
@@ -67,6 +68,13 @@ export class MobileIntelligenceRepository {
   async listSuggestions(): Promise<Array<Record<string, any>>> { return (await this.getPayload())?.suggestions ?? []; }
   async listRules(): Promise<Array<Record<string, any>>> { return (await this.getPayload())?.rules ?? []; }
   async listSavedSearches(): Promise<Array<Record<string, any>>> { return (await this.getPayload())?.savedSearches ?? []; }
+  async listCategorySchemas(category?: string): Promise<CategorySchemaRecord[]> {
+    const rows = (await this.getPayload())?.categorySchemas ?? [];
+    if (!category) return rows;
+    const normalized = category.toLocaleLowerCase();
+    return rows.filter(row => row.category === '*' || row.category.toLocaleLowerCase() === normalized)
+      .sort((left, right) => left.order - right.order);
+  }
 
   async appendChange(change: MobileChange): Promise<void> {
     const database = await this.open();

@@ -1,6 +1,6 @@
 use db::{
     intelligence::{
-        CorrectionRuleRecord, EvidenceRecord, FieldStateRecord, IntelligenceRepository,
+        CategorySchemaRecord, CorrectionRuleRecord, EvidenceRecord, FieldStateRecord, IntelligenceRepository,
         IntelligentSearchRequest, NewEvidence, NewSuggestion, SavedSearchRecord,
         SearchHistoryRecord, SearchRepository, SuggestionDecision, SuggestionRecord, MobileImportResult,
     },
@@ -133,6 +133,24 @@ fn delete_learning_rule(state: State<'_, AppState>, id: String) -> Result<(), St
 }
 
 #[tauri::command]
+fn list_category_schemas(state: State<'_, AppState>) -> Result<Vec<CategorySchemaRecord>, String> {
+    let connection = state.connection.lock().map_err(|_| "database lock poisoned".to_string())?;
+    IntelligenceRepository::list_category_schemas(&connection).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn upsert_category_schema(state: State<'_, AppState>, schema: CategorySchemaRecord) -> Result<CategorySchemaRecord, String> {
+    let connection = state.connection.lock().map_err(|_| "database lock poisoned".to_string())?;
+    IntelligenceRepository::upsert_category_schema(&connection, schema).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn delete_category_schema(state: State<'_, AppState>, category: String, key: String) -> Result<(), String> {
+    let connection = state.connection.lock().map_err(|_| "database lock poisoned".to_string())?;
+    IntelligenceRepository::delete_category_schema(&connection, &category, &key).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn intelligent_search(state: State<'_, AppState>, request: IntelligentSearchRequest) -> Result<Vec<ItemRecord>, String> {
     let connection = state.connection.lock().map_err(|_| "database lock poisoned".to_string())?;
     let ids = SearchRepository::search_ids(&connection, request).map_err(|error| error.to_string())?;
@@ -209,6 +227,7 @@ pub fn run() {
             app_health, create_item, update_item, get_item, search_items, archive_item, analyze_image,
             record_intelligence_analysis, list_review_queue, list_item_evidence, get_item_field_state,
             decide_field_suggestion, list_learning_rules, upsert_learning_rule, delete_learning_rule,
+            list_category_schemas, upsert_category_schema, delete_category_schema,
             intelligent_search, save_intelligent_search, record_search_history,
             list_saved_searches, list_search_history, export_intelligence_bundle, import_mobile_change_bundle
         ])

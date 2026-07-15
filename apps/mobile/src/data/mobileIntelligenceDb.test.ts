@@ -30,4 +30,11 @@ describe('mobile intelligence IndexedDB', () => {
     const bundle = await repository.exportChanges();
     expect(bundle.changes.map(row => row.id)).toEqual(['c1']);
   });
+
+  it('imports category schemas atomically with the snapshot', async () => {
+    const repository = new MobileIntelligenceRepository('vault-mobile-test');
+    const voltage = { category: 'tools', key: 'voltage', label: 'Voltage', kind: 'text', required: false, searchable: true, options: [], aliases: [], order: 10, enabled: true };
+    await repository.importSnapshot(await createSnapshotBundle('vault-1', 3, { items: [], rules: [], categorySchemas: [voltage] }));
+    expect(await repository.listCategorySchemas('tools')).toEqual([voltage]);
+  });
 });

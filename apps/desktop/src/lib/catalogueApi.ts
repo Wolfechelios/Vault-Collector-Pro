@@ -4,6 +4,7 @@ import type { VisionResult } from '@vault/domain';
 import type { FieldSuggestion, ItemFieldState, ScanEvidence } from '@vault/domain';
 import type { CorrectionRule } from '@vault/learning';
 import type { ParsedSearchQuery } from '@vault/search';
+import type { CategorySchemaRecord } from '@vault/intelligence-sync';
 
 export type ItemDraft = {
   id?: string;
@@ -133,6 +134,9 @@ export const catalogueApi = {
   learningRules: () => invoke<RuleRecord[]>('list_learning_rules'),
   upsertLearningRule: (rule: RuleRecord) => invoke<void>('upsert_learning_rule', { rule }),
   deleteLearningRule: (id: string) => invoke<void>('delete_learning_rule', { id }),
+  categorySchemas: () => invoke<CategorySchemaRecord[]>('list_category_schemas'),
+  upsertCategorySchema: (schema: CategorySchemaRecord) => invoke<CategorySchemaRecord>('upsert_category_schema', { schema }),
+  deleteCategorySchema: (category: string, key: string) => invoke<void>('delete_category_schema', { category, key }),
   intelligentSearch: async (parsed: ParsedSearchQuery) => {
     const results = await invoke<ItemRecord[]>('intelligent_search', { request: intelligentRequest(parsed) });
     await invoke<void>('record_search_history', {
